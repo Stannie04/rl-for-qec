@@ -143,6 +143,13 @@ class MultivariateBicycleCode(gym.Env):
             stabilizer.parity_check(stabilizer.connected_qubits)
 
 
+    def num_errors(self):
+        return sum(1 for qubit in self.data_qubits if qubit.error != 0)
+
+
+    def num_syndromes(self):
+        return sum(1 for stabilizer in self.stabilizers if stabilizer.state != 0)
+
 if __name__ == "__main__":
     # No interaction vectors: toric code
     # env = MultivariateBicycleCode(l=6, m=12)
@@ -153,3 +160,5 @@ if __name__ == "__main__":
     env.init_errors(num_errors=1)
     env.update_stabilizers()
     print(env)
+    print(env.num_errors())
+    print(env.num_syndromes())
