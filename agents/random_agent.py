@@ -4,10 +4,11 @@ This is currently a placeholder, until the environment has been properly defined
 """
 
 import random
+import gymnasium as gym
 
 class RandomAgent:
-    def __init__(self, actions):
-        self.actions = actions
+    def __init__(self, env: gym.Env):
+        self.env = env
 
-    def select_action(self, state):
-        return random.choice(self.actions)
+    def select_action(self, observation):
+        return self.env.action_space.sample()

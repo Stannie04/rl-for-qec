@@ -11,6 +11,9 @@ class DataQubit:
         reset = "\033[0m"
         return f"{color}{str(self.error)}{reset}"
 
+    def reset(self):
+        self.error = 0
+
     def flip(self, operation: int):
         self.error ^= operation
 
