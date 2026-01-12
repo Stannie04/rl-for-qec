@@ -1,12 +1,12 @@
 """A simple agent that selects actions randomly from a given set of possible actions.
 
-This is currently a placeholder, until the environment has been properly defined.
+Acts as a parent class for future agents.
 """
 
 import random
 import gymnasium as gym
 
-class RandomAgent:
+class Agent:
     def __init__(self, env: gym.Env):
         self.env = env
 

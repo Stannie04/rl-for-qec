@@ -17,20 +17,25 @@ class MultivariateBicycleCode(gym.Env):
         self.observation_space = gym.spaces.Box(0, 1, shape=(2*self.m*self.l,), dtype=int)
         self.action_space = gym.spaces.Discrete(num_actions)
 
+        self.episode_steps = 0
+        self.max_episode_length = 100
+
 
     def step(self, action):
         qubit_acted_on = self.data_qubits[action]
         qubit_acted_on.flip(operation=1)
 
-        # TODO: Make this more efficient
-        self._update_stabilizers()
+        self.episode_steps += 1
 
-        terminated = False
-        truncated = False
+        info = self._get_info()
+
+        terminated = info["num_errors"] == 0
+        truncated = self.episode_steps > self.max_episode_length
+
+        reward = 1 if terminated else -0.01
 
         observation = self._get_obs()
-        info = self._get_info()
-        reward = 1 if terminated else 0
+
 
         return observation, reward, terminated, truncated, info
 
@@ -40,6 +45,7 @@ class MultivariateBicycleCode(gym.Env):
 
         self.init_errors(options)
 
+        self.episode_steps = 0
         return self._get_obs(), self._get_info()
 
 
@@ -80,30 +86,26 @@ class MultivariateBicycleCode(gym.Env):
     def init_errors(self, options: Optional[dict] = {}):
         """ Set all qubits to 0. Then, randomly flip `num_errors` data qubits in the grid."""
 
+        num_errors = options.get("num_errors", 1)
+
+        for qubit in self.data_qubits:
+            qubit.reset()
+
+        for stabilizer in self.stabilizers:
+            stabilizer.reset()
+
         # Example to see cycle pattern
         # for (i, j) in [(8,8), (5, 17)]:
         #     self.full_grid[i][j].flip(operation=3)
 
         # Logical qubit X error, as per "Tour de gross: A modular quantum computer based on bivariate bicycle codes, Figure 3b"
-        # for (i, j) in [(0,6), (1,13), (3,11), (6,6), (6,8), (7,9), (9,13), (8,6), (10,6), (10,8), (11,9), (11,11)]:
+        # for (i, j) in [(0, 6), (1, 13), (3, 11), (6, 6), (6, 8), (7, 9), (9, 13), (8, 6), (10, 6), (10, 8), (11, 9),
+        #                (11, 11)]:
         #     self.full_grid[i][j].flip(operation=1)
-
-        num_errors = options.get("num_errors", 3)
-
-        for qubit in self.data_qubits:
-            qubit.reset()
 
         for qubit in np.random.choice(self.data_qubits, size=num_errors, replace=False):
             qubit.flip(operation=1)
             # qubit.flip(operation=np.random.choice([1, 2, 3]))
-
-        self._update_stabilizers()
-
-
-    def _update_stabilizers(self):
-        """ Update the state of all stabilizers based on the current errors on data qubits."""
-        for stabilizer in self.stabilizers:
-            stabilizer.parity_check(stabilizer.connected_qubits)
 
 
     def _get_obs(self):
@@ -125,7 +127,4 @@ if __name__ == "__main__":
     env = MultivariateBicycleCode(l=12, m=6, interaction_vectors=[(3, 6), (6, -3)])
 
     env.init_errors({"num_errors": 3})
-    env._update_stabilizers()
-    print(env)
-    print(f"Number of errors: {env.get_num_errors()}")
-    print(f"Number of syndromes: {env.get_num_syndromes()}")
+    env.render()
