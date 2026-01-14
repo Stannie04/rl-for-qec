@@ -1,5 +1,10 @@
 # Changelog
 
+### 14.01.2026
+- Added training for DQN and PPO agents on bivariate bicycle codes.
+- Implemented performance evaluation and plotting of results.
+
+
 ### 10.01.2026
 - Added project documentation through ``Changelog.md``, ``Roadmap.md`` and ``README.md``.
 

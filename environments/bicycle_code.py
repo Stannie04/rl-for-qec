@@ -7,7 +7,7 @@ from .qubits import DataQubit, Stabilizer
 
 class MultivariateBicycleCode(gym.Env):
 
-    def __init__(self, l: int, m: int, interaction_vectors=None):
+    def __init__(self, l: int, m: int, num_errors: int, interaction_vectors=None):
         super().__init__()
 
         self.init_qubits(l, m, interaction_vectors)
@@ -20,6 +20,9 @@ class MultivariateBicycleCode(gym.Env):
         self.episode_steps = 0
         self.max_episode_length = 100
 
+        self.num_errors = num_errors
+
+        self.previous_info = None
 
     def step(self, action):
         qubit_acted_on = self.data_qubits[action]
@@ -34,8 +37,12 @@ class MultivariateBicycleCode(gym.Env):
 
         reward = 1 if terminated else -0.01
 
+        if self.previous_info is not None:
+            reward += (self.previous_info["num_syndromes"] - info["num_syndromes"]) * 0.1
+
         observation = self._get_obs()
 
+        self.previous_info = info
 
         return observation, reward, terminated, truncated, info
 
@@ -86,7 +93,7 @@ class MultivariateBicycleCode(gym.Env):
     def init_errors(self, options: Optional[dict] = {}):
         """ Set all qubits to 0. Then, randomly flip `num_errors` data qubits in the grid."""
 
-        num_errors = options.get("num_errors", 1)
+        num_errors = options.get("num_errors", self.num_errors)
 
         for qubit in self.data_qubits:
             qubit.reset()

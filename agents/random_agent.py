@@ -3,7 +3,6 @@
 Acts as a parent class for future agents.
 """
 
-import random
 import gymnasium as gym
 
 class Agent:

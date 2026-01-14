@@ -1,6 +1,7 @@
 # Near-term Roadmap
-- Define the constructed code as a Gym environment for RL agents to interact with.
-- Train RL agents on the defined environment to perform quantum error correction. (Random, DQN, PPO, ...)
+- Fine-tune the environment through HPO and more elaborate reward structures.
+- Implement and benchmark additional RL algorithms (e.g., A3C, SAC).
+- Evaluate the performance of different types of multivariate bicycle codes.
 - Evaluate the use of GNNs as function approximators for RL agents in this context.
 
 
