@@ -15,7 +15,6 @@ def plot_results(results):
     plt.ylabel("Reward")
     plt.legend()
     plt.grid()
-    plt.show()
     plt.savefig("results/results.png")
 
 
@@ -26,7 +25,7 @@ def smooth(y, window, poly=1):
     return savgol_filter(y,window,poly)
 
 
-def get_confidence_bounds(results, window=50):
+def get_confidence_bounds(results, window=20):
     """
     Calculates smoothed mean and 95% confidence intervals for the results.
     """

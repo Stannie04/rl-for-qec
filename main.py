@@ -38,17 +38,20 @@ if __name__ == '__main__':
     env = MultivariateBicycleCode(l=3, m=3, num_errors=1)
     env.render()
 
-    results = {"dqn": [], "ppo": []}
-    for name in ["dqn", "ppo"]:
-
+    results = {}
+    for name in ["dqn"]:
+        rewards = []
         for i in range(5):
 
             agent = DQN(env=env, policy="MlpPolicy") if name == "dqn" else PPO("MlpPolicy", env)
             callback = RewardTrackerCallback()
-            agent.learn(total_timesteps=50000, progress_bar=True, callback=callback)
-            mean_rewards = callback.mean_rewards
+            agent.learn(total_timesteps=25000, progress_bar=True, callback=callback)
+            rewards.append(callback.mean_rewards)
 
-            results[name].append(mean_rewards)
+        # Pad rewards so all are of equal length
+        max_len = max(len(row) for row in rewards)
+        results[name] = np.array([row + [row[-1]] * (max_len - len(row)) for row in rewards])
+
 
     plot_results(results)
 
