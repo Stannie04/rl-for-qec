@@ -3,9 +3,10 @@
 import numpy as np
 
 class DataQubit:
-    def __init__(self):
+    def __init__(self, error_rate: float = 0.01):
         self.error = 0 # 0: no error, 1: X error, 2: Z error, 3: Y error
         self.connected_stabilizers = []
+        self.error_rate = error_rate
 
     def __str__(self):
         color = "\033[0m" if self.error == 0 else "\033[33m"
@@ -15,13 +16,17 @@ class DataQubit:
     def reset(self):
         self.error = 0
 
-    def flip(self, operation: int):
-        self.error ^= operation
 
-        # Update stabilizers
-        for stabilizer in self.connected_stabilizers:
-            if stabilizer.check_type == operation or operation == 3:
-                stabilizer.flip_parity()
+    def flip(self, operation: int, force=False):
+
+        if force or np.random.random() < self.error_rate:
+
+            self.error ^= operation
+
+            # Update stabilizers
+            for stabilizer in self.connected_stabilizers:
+                if stabilizer.check_type == operation or operation == 3:
+                    stabilizer.flip_parity()
 
 
     def add_stabilizer_to_connections(self, stabilizer):

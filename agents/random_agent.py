@@ -5,7 +5,7 @@ Acts as a parent class for future agents.
 
 import gymnasium as gym
 
-class Agent:
+class RandomAgent:
     def __init__(self, env: gym.Env):
         self.env = env
 

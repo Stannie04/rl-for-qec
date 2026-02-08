@@ -4,11 +4,14 @@ import gymnasium as gym
 import numpy as np
 from typing import Optional
 from .qubits import DataQubit, Stabilizer
+import random
 
 class MultivariateBicycleCode(gym.Env):
 
-    def __init__(self, l: int, m: int, num_errors: int, interaction_vectors=None):
+    def __init__(self, l: int, m: int, num_errors: int, interaction_vectors=None, error_rate=0.01):
         super().__init__()
+
+        self.error_rate = error_rate
 
         self.init_qubits(l, m, interaction_vectors)
 
@@ -19,32 +22,35 @@ class MultivariateBicycleCode(gym.Env):
 
         self.episode_steps = 0
         self.max_episode_length = 100
+        self.current_player = 0
 
-        self.num_errors = num_errors
-
+        self.info = None
         self.previous_info = None
 
+
     def step(self, action):
+
+        self.previous_info = self._get_info()
+
+        # Flip the assigned qubit.
         qubit_acted_on = self.data_qubits[action]
-        qubit_acted_on.flip(operation=1)
+        qubit_acted_on.flip(operation=1, force=True)
 
+        # Check whether the episode is finished.
         self.episode_steps += 1
-
-        info = self._get_info()
-
-        terminated = info["num_errors"] == 0
+        self.info = self._get_info()
+        terminated = self._get_terminated()
         truncated = self.episode_steps > self.max_episode_length
 
-        reward = 1 if terminated else -0.01
+        # Calculate reward.
+        reward = 1
+        self.current_player = 1 - self.current_player
 
-        if self.previous_info is not None:
-            reward += (self.previous_info["num_syndromes"] - info["num_syndromes"]) * 0.1
+        for qubit in self.data_qubits:
+            qubit.flip(operation=1)
 
         observation = self._get_obs()
-
-        self.previous_info = info
-
-        return observation, reward, terminated, truncated, info
+        return observation, reward, terminated, truncated, self.info
 
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = {}):
@@ -74,7 +80,7 @@ class MultivariateBicycleCode(gym.Env):
         for i in range(2 * m):
             for j in range(2 * l):
                 if (i + j) % 2 == 0:
-                    qubit = DataQubit()
+                    qubit = DataQubit(self.error_rate)
                     self.full_grid[i][j] = qubit
                     data_qubits.append(qubit)
                 else:
@@ -93,26 +99,15 @@ class MultivariateBicycleCode(gym.Env):
     def init_errors(self, options: Optional[dict] = {}):
         """ Set all qubits to 0. Then, randomly flip `num_errors` data qubits in the grid."""
 
-        num_errors = options.get("num_errors", self.num_errors)
-
         for qubit in self.data_qubits:
             qubit.reset()
 
         for stabilizer in self.stabilizers:
             stabilizer.reset()
 
-        # Example to see cycle pattern
-        # for (i, j) in [(8,8), (5, 17)]:
-        #     self.full_grid[i][j].flip(operation=3)
-
-        # Logical qubit X error, as per "Tour de gross: A modular quantum computer based on bivariate bicycle codes, Figure 3b"
-        # for (i, j) in [(0, 6), (1, 13), (3, 11), (6, 6), (6, 8), (7, 9), (9, 13), (8, 6), (10, 6), (10, 8), (11, 9),
-        #                (11, 11)]:
-        #     self.full_grid[i][j].flip(operation=1)
-
-        for qubit in np.random.choice(self.data_qubits, size=num_errors, replace=False):
+        # Flip all qubits based on an error rate
+        for qubit in self.data_qubits:
             qubit.flip(operation=1)
-            # qubit.flip(operation=np.random.choice([1, 2, 3]))
 
 
     def _get_obs(self):
@@ -122,8 +117,14 @@ class MultivariateBicycleCode(gym.Env):
     def _get_info(self):
         return {
             "num_errors": sum(1 for qubit in self.data_qubits if qubit.error != 0),
-            "num_syndromes": sum(1 for stabilizer in self.stabilizers if stabilizer.state != 0)
+            "num_syndromes": sum(1 for stabilizer in self.stabilizers if stabilizer.state != 0),
         }
+
+
+    def _get_terminated(self):
+        """Check whether a logical error has occurred."""
+
+        return self.info["num_errors"] > 5
 
 
 if __name__ == "__main__":

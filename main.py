@@ -1,11 +1,14 @@
 from environments import MultivariateBicycleCode
-from agents import Agent
+from agents import RandomAgent, AdversarialAgent
 from utils.plot_utils import plot_results
+
+import json
+import sys
 
 from tqdm import tqdm
 import numpy as np
 import time
-from stable_baselines3 import DQN, PPO
+from stable_baselines3 import DQN, PPO, SAC
 from stable_baselines3.common.callbacks import BaseCallback
 
 
@@ -30,43 +33,48 @@ class RewardTrackerCallback(BaseCallback):
 
         return True
 
+
+def get_agent(agent_name):
+    if agent_name == "dqn":
+        return DQN(env=env, policy="MlpPolicy")
+    elif agent_name == "ppo":
+        return PPO("MlpPolicy", env)
+    elif agent_name == "adversarial":
+        return AdversarialAgent(env)
+
+    raise ValueError(f"Unknown agent: {agent_name}")
+
+
+def get_config(config_file, agent_name):
+    full_config = json.load(open(config_file))
+    return full_config[agent_name]
+
+
 if __name__ == '__main__':
     # As per "Tour de gross: A modular quantum computer based on bivariate bicycle codes, Figure 3b"
     # env = MultivariateBicycleCode(l=12, m=6, interaction_vectors=[(3, 6), (6, -3)])
     # agent = Agent(env)
 
-    env = MultivariateBicycleCode(l=3, m=3, num_errors=1)
+    agent_name = sys.argv[1] if len(sys.argv) > 1 else "dqn"
+    config = get_config("model_configs.json", agent_name)
+
+    env = MultivariateBicycleCode(l=5, m=3, num_errors=1, interaction_vectors=[(3, 4)])
     env.render()
 
     results = {}
-    for name in ["dqn"]:
-        rewards = []
-        for i in range(5):
 
-            agent = DQN(env=env, policy="MlpPolicy") if name == "dqn" else PPO("MlpPolicy", env)
+    for error_rate in [0.001, 0.005, 0.01, 0.05]:
+        rewards = []
+        for i in range(config["n_repetitions"]):
+            env = MultivariateBicycleCode(l=5, m=3, num_errors=1, interaction_vectors=[(3,4)], error_rate=error_rate)
+
+            agent = get_agent(agent_name)
             callback = RewardTrackerCallback()
-            agent.learn(total_timesteps=25000, progress_bar=True, callback=callback)
+            agent.learn(total_timesteps=config["num_timesteps"], progress_bar=True, callback=callback)
             rewards.append(callback.mean_rewards)
 
         # Pad rewards so all are of equal length
         max_len = max(len(row) for row in rewards)
-        results[name] = np.array([row + [row[-1]] * (max_len - len(row)) for row in rewards])
-
+        results[error_rate] = np.array([row + [row[-1]] * (max_len - len(row)) for row in rewards])
 
     plot_results(results)
-
-    # times = []
-    # for i in tqdm(range(100)):
-    #     observation, info = env.reset()
-    #     # env.render()
-    #     done = False
-    #     start = time.time()
-    #     episode_reward = 0
-    #     while not done:
-    #         observation, reward, terminated, truncated, info = env.step(agent.select_action(observation))
-    #         done = terminated or truncated
-    #         episode_reward += reward
-    #     end = time.time()
-    #     times.append(end - start)
-    # env.render()
-    # print(f"Episode took {np.mean(times)} seconds.")

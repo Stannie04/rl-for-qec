@@ -7,11 +7,17 @@ def plot_results(results):
     plt.figure(figsize=(12, 6))
     for name, runs in results.items():
         mean, ci95 = get_confidence_bounds(runs)
-        plt.plot(mean, label=f"{name} Mean", linewidth=2)
-        plt.fill_between(range(len(mean)), mean - ci95, mean + ci95, alpha=0.3, label=f"{name} 95% CI")
+
+        x_len = len(mean)
+        progress = np.linspace(0, 100, x_len)
+
+        plt.plot(progress, mean, label=f"{name} Mean", linewidth=2)
+        print(runs)
+        if len(runs) != 1:
+            plt.fill_between(progress, mean - ci95, mean + ci95, alpha=0.3, label=f"{name} 95% CI")
 
     plt.title("RL Agent Performance on Multivariate Bicycle Code Environment")
-    plt.xlabel("Episodes")
+    plt.xlabel("Training progress")
     plt.ylabel("Reward")
     plt.legend()
     plt.grid()
