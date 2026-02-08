@@ -8,7 +8,7 @@ import random
 
 class MultivariateBicycleCode(gym.Env):
 
-    def __init__(self, l: int, m: int, num_errors: int, interaction_vectors=None, error_rate=0.01):
+    def __init__(self, l: int, m: int, interaction_vectors=None, error_rate=0.01):
         super().__init__()
 
         self.error_rate = error_rate
@@ -43,11 +43,16 @@ class MultivariateBicycleCode(gym.Env):
         truncated = self.episode_steps > self.max_episode_length
 
         # Calculate reward.
-        reward = 1
+        num_errors = self.info["num_errors"]
+
+        if self.current_player == 0:  # Defender
+            reward = -num_errors
+        else:  # Adversary
+            reward = num_errors
         self.current_player = 1 - self.current_player
 
-        for qubit in self.data_qubits:
-            qubit.flip(operation=1)
+        # for qubit in self.data_qubits:
+        #     qubit.flip(operation=1)
 
         observation = self._get_obs()
         return observation, reward, terminated, truncated, self.info
@@ -111,7 +116,7 @@ class MultivariateBicycleCode(gym.Env):
 
 
     def _get_obs(self):
-        return [stabilizer.state for stabilizer in self.stabilizers]
+        return np.array([stabilizer.state for stabilizer in self.stabilizers], dtype=np.float32)
 
 
     def _get_info(self):

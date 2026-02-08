@@ -1,6 +1,6 @@
 {
   "dqn": {
-    "n_repetitions" : 3,
+    "n_repetitions" : 1,
     "num_timesteps" : 100000,
     "error_rate": 0.02
   }
