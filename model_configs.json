@@ -1,7 +1,9 @@
 {
   "dqn": {
-    "n_repetitions" : 1,
-    "num_timesteps" : 100000,
-    "error_rate": 0.02
+    "n_repetitions" : 3,
+    "pretrain_timesteps": 50000,
+    "num_timesteps" : 1000000,
+    "error_rate": 0.02,
+    "train_frequency": 4
   }
 }

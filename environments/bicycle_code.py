@@ -3,8 +3,8 @@
 import gymnasium as gym
 import numpy as np
 from typing import Optional
-from .qubits import DataQubit, Stabilizer
-import random
+# from .qubits import DataQubit, Stabilizer
+# import random
 
 class MultivariateBicycleCode(gym.Env):
 
@@ -13,7 +13,7 @@ class MultivariateBicycleCode(gym.Env):
 
         self.error_rate = error_rate
 
-        self.init_qubits(l, m, interaction_vectors)
+        self._init_qubits(l, m, interaction_vectors)
 
         num_actions = 2*self.l*self.m
 
@@ -24,17 +24,19 @@ class MultivariateBicycleCode(gym.Env):
         self.max_episode_length = 100
         self.current_player = 0
 
+        self.num_errors = 0
         self.info = None
         self.previous_info = None
 
 
-    def step(self, action):
+    def step(self, action, single_player=True):
 
         self.previous_info = self._get_info()
 
         # Flip the assigned qubit.
-        qubit_acted_on = self.data_qubits[action]
-        qubit_acted_on.flip(operation=1, force=True)
+        self.data_errors[action] = 1 - self.data_errors[action]
+        self.stabilizer_states[self.qubits_to_stabilizers[action]] ^= 1
+
 
         # Check whether the episode is finished.
         self.episode_steps += 1
@@ -42,17 +44,24 @@ class MultivariateBicycleCode(gym.Env):
         terminated = self._get_terminated()
         truncated = self.episode_steps > self.max_episode_length
 
+
+        previous_errors = self.previous_info["num_errors"]
+        current_errors = self.info["num_errors"]
+
+        delta_errors = current_errors - previous_errors
+
         # Calculate reward.
-        num_errors = self.info["num_errors"]
-
-        if self.current_player == 0:  # Defender
-            reward = -num_errors
+        if single_player or self.current_player == 0:  # Defender
+            reward = -(delta_errors + self.max_episode_length * terminated)
         else:  # Adversary
-            reward = num_errors
-        self.current_player = 1 - self.current_player
+            reward = delta_errors + self.max_episode_length * terminated
 
-        # for qubit in self.data_qubits:
-        #     qubit.flip(operation=1)
+        # Update state.
+        if single_player:
+            self._flip_randomly()
+        else:
+            self.current_player = 1 - self.current_player
+
 
         observation = self._get_obs()
         return observation, reward, terminated, truncated, self.info
@@ -61,68 +70,89 @@ class MultivariateBicycleCode(gym.Env):
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = {}):
         super().reset(seed=seed)
 
-        self.init_errors(options)
+        self.data_errors.fill(0)
+        self.stabilizer_states.fill(0)
+
+        # Flip qubits based on an error rate
+        self._flip_randomly()
+
+        # hardcoded_idx = 20
+        # self.data_errors[hardcoded_idx] = 1
+        # self.stabilizer_states[self.qubits_to_stabilizers[hardcoded_idx]] ^= 1
 
         self.episode_steps = 0
+        self.current_player = 0
         return self._get_obs(), self._get_info()
 
 
     def render(self, mode='human'):
-        rows = [" ".join(str(cell) for cell in row) for row in self.full_grid]
+        rows = []
+        for i in range(2 * self.m):
+            row_cells = []
+            for j in range(2 * self.l):
+                if (i + j) % 2 == 0:
+                    # Data qubit
+                    idx = self._grid_to_data_idx(i, j)
+                    val = self.data_errors[idx]
+                    color = "\033[0m" if val == 0 else "\033[33m"  # yellow if error
+                    row_cells.append(f"{color}{val}\033[0m")
+                else:
+                    # Stabilizer
+                    idx = self._grid_to_stabilizer_idx(i, j)
+                    val = self.stabilizer_states[idx]
+                    color = "\033[32m" if val == 0 else "\033[31m"  # green or red
+                    row_cells.append(f"{color}{'X' if i % 2 == 0 else 'Z'}\033[0m")
+            rows.append(" ".join(row_cells))
+
         print("\n".join(rows) + "\n")
 
 
-    def init_qubits(self, l, m, interaction_vectors=None):
-        if interaction_vectors is None:
-            interaction_vectors = []
+    def _flip_randomly(self):
+        mask = np.random.rand(self.n_data) < self.error_rate
+        self.data_errors[mask] = 1
+
+        for i in range(self.n_data):
+            if mask[i]:
+                self.stabilizer_states[self.qubits_to_stabilizers[i]] ^= 1
+
+    def _init_qubits(self, l, m, interaction_vectors=None):
 
         self.l, self.m = l, m
-        self.full_grid = np.empty((2*self.m, 2*self.l), dtype=object)
+        self.n_data, self.n_stabilizers = 2*l*m, 2*l*m
 
-        data_qubits = []
-        stabilizers = []
+        self.data_errors = np.zeros(self.n_data, dtype=np.int8)
+        self.stabilizer_states = np.zeros(self.n_stabilizers, dtype=np.int8)
+
+        # TODO: non-uniform error rates
+        self.error_rates = np.full(self.n_data, self.error_rate, dtype=np.float32)
+
+        # Get index mapping for data qubits and stabilizers.
+        self.qubits_to_stabilizers = [list() for _ in range(self.n_data)]
 
         for i in range(2 * m):
             for j in range(2 * l):
-                if (i + j) % 2 == 0:
-                    qubit = DataQubit(self.error_rate)
-                    self.full_grid[i][j] = qubit
-                    data_qubits.append(qubit)
-                else:
-                    stabilizer = Stabilizer(check_type=i%2, i=i, j=j)
-                    self.full_grid[i][j] = stabilizer
-                    stabilizers.append(stabilizer)
-
-        self.data_qubits = np.array(data_qubits, dtype=object)
-        self.stabilizers = np.array(stabilizers, dtype=object)
-
-        # Initialize connected qubits for each stabilizer
-        for stabilizer in self.stabilizers:
-            stabilizer.initialize_connected_qubits(self.full_grid, interaction_vectors=interaction_vectors)
+                if (i + j) % 2 == 0: # Data qubits
+                    data_idx = self._grid_to_data_idx(i, j)
+                    for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)] + (interaction_vectors or []):
+                        di, dj = (di, dj) if i % 2 == 0 else (-di, -dj) # Flip interaction vectors for L sublattice
+                        self.qubits_to_stabilizers[data_idx].append(self._grid_to_stabilizer_idx((i + di) % (2*m), (j + dj) % (2*l)))
 
 
-    def init_errors(self, options: Optional[dict] = {}):
-        """ Set all qubits to 0. Then, randomly flip `num_errors` data qubits in the grid."""
+    def _grid_to_data_idx(self, i, j):
+        return i*self.l + j//2 if (i + j) % 2 == 0 else i*self.l + (j-1)//2
 
-        for qubit in self.data_qubits:
-            qubit.reset()
-
-        for stabilizer in self.stabilizers:
-            stabilizer.reset()
-
-        # Flip all qubits based on an error rate
-        for qubit in self.data_qubits:
-            qubit.flip(operation=1)
+    def _grid_to_stabilizer_idx(self, i, j):
+        return i*self.l + j//2 if (i + j) % 2 == 1 else i*self.l + (j-1)//2
 
 
     def _get_obs(self):
-        return np.array([stabilizer.state for stabilizer in self.stabilizers], dtype=np.float32)
+        return self.stabilizer_states
 
 
     def _get_info(self):
         return {
-            "num_errors": sum(1 for qubit in self.data_qubits if qubit.error != 0),
-            "num_syndromes": sum(1 for stabilizer in self.stabilizers if stabilizer.state != 0),
+            "num_errors": np.sum(self.data_errors),
+            "num_syndromes": np.sum(self.stabilizer_states),
         }
 
 
@@ -132,12 +162,10 @@ class MultivariateBicycleCode(gym.Env):
         return self.info["num_errors"] > 5
 
 
+
 if __name__ == "__main__":
-    # No interaction vectors: toric code
-    # env = MultivariateBicycleCode(l=6, m=12)
-
-    # As per "Tour de gross: A modular quantum computer based on bivariate bicycle codes, Figure 3b"
-    env = MultivariateBicycleCode(l=12, m=6, interaction_vectors=[(3, 6), (6, -3)])
-
-    env.init_errors({"num_errors": 3})
+    env = MultivariateBicycleCode(l=5, m=3, interaction_vectors=[(3, 4)], error_rate=0)
+    obs, info = env.reset()
+    print(obs)
+    print(info)
     env.render()

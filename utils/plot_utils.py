@@ -35,6 +35,17 @@ def get_confidence_bounds(results, window=20):
     """
     Calculates smoothed mean and 95% confidence intervals for the results.
     """
+
+    # Convert to list of arrays
+    results = [np.array(r) for r in results]
+
+    # Find minimum length
+    min_len = min(len(r) for r in results)
+
+    # Truncate all runs
+    results = np.array([r[:min_len] for r in results])
+
     mean = smooth(np.mean(results, axis=0), window=window)
     ci95 = 1.96 * np.std(results, axis=0) / np.sqrt(len(results))
+
     return mean, smooth(ci95, window=window)
