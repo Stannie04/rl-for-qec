@@ -1,0 +1,17 @@
+{
+    "tour_de_gross": {
+        "l": 12,
+        "m": 6,
+        "interaction_vectors": [
+            [3, 6],
+            [6, -3]
+        ]
+    },
+    "multivariate_bicycle_code": {
+        "l": 5,
+        "m": 3,
+        "interaction_vectors": [
+            [3, 4]
+        ]
+    }
+}

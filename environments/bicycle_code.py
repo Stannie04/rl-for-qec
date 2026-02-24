@@ -48,7 +48,7 @@ class MultivariateBicycleCode(gym.Env):
         previous_errors = self.previous_info["num_errors"]
         current_errors = self.info["num_errors"]
 
-        delta_errors = current_errors - previous_errors
+        delta_errors = previous_errors - current_errors
 
         # Calculate reward.
         if single_player or self.current_player == 0:  # Defender
@@ -153,6 +153,7 @@ class MultivariateBicycleCode(gym.Env):
         return {
             "num_errors": np.sum(self.data_errors),
             "num_syndromes": np.sum(self.stabilizer_states),
+            "episode_steps": self.episode_steps,
         }
 
 
