@@ -1,9 +1,28 @@
 {
   "dqn": {
     "n_repetitions" : 3,
-    "pretrain_timesteps": 50000,
+    "pretrain_timesteps": 0,
     "num_timesteps" : 1000000,
     "error_rate": 0.02,
-    "train_frequency": 4
+    "train_frequency": 128,
+    "batch_size": 512,
+    "gradient_steps": 32
+  },
+
+  "sac": {
+    "n_repetitions" : 3,
+    "pretrain_timesteps": 100000,
+    "num_timesteps" : 1000000,
+
+    "params": {
+      "batch_size": 64,
+      "learning_rate": 0.0003388479408979718,
+      "buffer_size": 500000,
+      "gamma": 0.9893849237816411,
+      "tau": 0.018768131988037548,
+      "train_freq": 8,
+      "gradient_steps": 1,
+      "ent_coef": 0.01651545290854241
+    }
   }
 }

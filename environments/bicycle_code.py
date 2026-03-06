@@ -8,35 +8,54 @@ from typing import Optional
 
 class MultivariateBicycleCode(gym.Env):
 
-    def __init__(self, l: int, m: int, interaction_vectors=None, error_rate=0.01):
+    def __init__(self, l: int, m: int, interaction_vectors=None,
+                 logical_operators=None, error_rate=None, # No defaults given so that they must be explicitly set in the config files,
+                 evaluation_mode=False, action_threshold=None,  # reducing bugs from forgetting to set them.
+                 termination_threshold=None, max_episode_length=None):
+
         super().__init__()
 
         self.error_rate = error_rate
 
         self._init_qubits(l, m, interaction_vectors)
 
-        num_actions = 2*self.l*self.m
-
-        self.observation_space = gym.spaces.Box(0, 1, shape=(2*self.m*self.l,), dtype=int)
-        self.action_space = gym.spaces.Discrete(num_actions)
+        self.observation_space = gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.uint8)
+        self.action_space = gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.float32)
 
         self.episode_steps = 0
-        self.max_episode_length = 100
         self.current_player = 0
 
         self.num_errors = 0
         self.info = None
         self.previous_info = None
+        self.logical_operators = logical_operators
+
+        self.max_episode_length = max_episode_length
+        self.evaluation_mode = evaluation_mode
+        self.action_threshold = action_threshold
+        self.termination_threshold = termination_threshold
 
 
     def step(self, action, single_player=True):
 
         self.previous_info = self._get_info()
+        # Intermediate visualization of the action
+        if self.evaluation_mode:
+            print("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n")
+            self.render()
+
+        error_locations = np.where(self.data_errors == 1)[0]
+
+        mask = action > self.action_threshold
+
+        self.data_errors[mask] = 1 - self.data_errors[mask]
+        for i in range(self.n_data):
+            if mask[i]:
+                self.stabilizer_states[self.qubits_to_stabilizers[i]] ^= 1
 
         # Flip the assigned qubit.
-        self.data_errors[action] = 1 - self.data_errors[action]
-        self.stabilizer_states[self.qubits_to_stabilizers[action]] ^= 1
-
+        # self.data_errors[action] = 1 - self.data_errors[action]
+        # self.stabilizer_states[self.qubits_to_stabilizers[action]] ^= 1
 
         # Check whether the episode is finished.
         self.episode_steps += 1
@@ -52,16 +71,18 @@ class MultivariateBicycleCode(gym.Env):
 
         # Calculate reward.
         if single_player or self.current_player == 0:  # Defender
-            reward = -(delta_errors + self.max_episode_length * terminated)
+            # The defender gets a positive reward for reducing the number of errors, and a negative reward for increasing it.
+            # Additionally, they get a large negative reward if the episode ends due to a logical error.
+            reward = 1 + delta_errors #- self.max_episode_length * terminated
         else:  # Adversary
-            reward = delta_errors + self.max_episode_length * terminated
+            reward = -(delta_errors - self.max_episode_length * terminated)
+
 
         # Update state.
         if single_player:
             self._flip_randomly()
         else:
             self.current_player = 1 - self.current_player
-
 
         observation = self._get_obs()
         return observation, reward, terminated, truncated, self.info
@@ -75,10 +96,6 @@ class MultivariateBicycleCode(gym.Env):
 
         # Flip qubits based on an error rate
         self._flip_randomly()
-
-        # hardcoded_idx = 20
-        # self.data_errors[hardcoded_idx] = 1
-        # self.stabilizer_states[self.qubits_to_stabilizers[hardcoded_idx]] ^= 1
 
         self.episode_steps = 0
         self.current_player = 0
@@ -108,6 +125,11 @@ class MultivariateBicycleCode(gym.Env):
 
 
     def _flip_randomly(self):
+
+        # Flip a single bit
+        # idx = np.random.randint(self.n_data)
+        # self.data_errors[idx] = 1 - self.data_errors[idx]
+        # self.stabilizer_states[self.qubits_to_stabilizers[idx]] ^= 1
         mask = np.random.rand(self.n_data) < self.error_rate
         self.data_errors[mask] = 1
 
@@ -135,7 +157,12 @@ class MultivariateBicycleCode(gym.Env):
                     data_idx = self._grid_to_data_idx(i, j)
                     for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)] + (interaction_vectors or []):
                         di, dj = (di, dj) if i % 2 == 0 else (-di, -dj) # Flip interaction vectors for L sublattice
-                        self.qubits_to_stabilizers[data_idx].append(self._grid_to_stabilizer_idx((i + di) % (2*m), (j + dj) % (2*l)))
+
+                        # We are currently only looking at bit-flip errors, so only consider the Z stabilizers (i+j odd) that act on this data qubit.
+                        ni = (i + di) % (2*m)
+                        nj = (j + dj) % (2*l)
+                        if ni % 2 == 1:
+                            self.qubits_to_stabilizers[data_idx].append(self._grid_to_stabilizer_idx(ni, nj))
 
 
     def _grid_to_data_idx(self, i, j):
@@ -160,13 +187,17 @@ class MultivariateBicycleCode(gym.Env):
     def _get_terminated(self):
         """Check whether a logical error has occurred."""
 
-        return self.info["num_errors"] > 5
+        return self.info["num_errors"] > self.termination_threshold
 
 
 
 if __name__ == "__main__":
-    env = MultivariateBicycleCode(l=5, m=3, interaction_vectors=[(3, 4)], error_rate=0)
+    env = MultivariateBicycleCode(l=5, m=3, interaction_vectors=[(3, 4)], error_rate=0.05)
     obs, info = env.reset()
-    print(obs)
-    print(info)
+    env.render()
+
+    # random action
+    action = env.action_space.sample()
+    obs, reward, terminated, truncated, info = env.step(action)
+
     env.render()

@@ -17,8 +17,8 @@ def print_example_env(code_config):
 
 if __name__ == '__main__':
 
-    agent_name = sys.argv[1] if len(sys.argv) > 1 else "dqn"
-    code_name = sys.argv[2] if len(sys.argv) > 2 else "multivariate_bicycle_code"
+    agent_name = sys.argv[1] if len(sys.argv) > 1 else "sac"
+    code_name = sys.argv[2] if len(sys.argv) > 2 else "18_4_4"
 
     model_config, code_config = get_configs("model_configs.json", "code_configs.json", agent_name, code_name)
 

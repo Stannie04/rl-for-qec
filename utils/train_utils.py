@@ -42,20 +42,18 @@ def get_agent(agent_name, env):
 
 def initialize_agents(config, env):
 
-    defender = DQN(
+    defender = SAC(
         policy="MlpPolicy",
         env=env,
-        learning_rate=1e-4,
-        buffer_size=500_000,
-        learning_starts=1_000,
+        device="cuda",
+        **config
     )
 
-    adversary = DQN(
+    adversary = SAC(
         policy="MlpPolicy",
         env=env,
-        learning_rate=1e-4,
-        buffer_size=500_000,
-        learning_starts=1_000,
+        device="cuda",
+        **config
     )
 
     return defender, adversary
