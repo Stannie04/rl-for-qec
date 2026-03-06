@@ -10,8 +10,24 @@ def get_configs(model_config_file, code_config_file, agent_name, code_name):
 
 
 def print_example_env(code_config):
-    env = MultivariateBicycleCode(**code_config)
-    env.render()
+
+    sample_config = code_config.copy()
+    sample_config["error_rate"] = 0
+
+    env = QLDPCCode(**sample_config)
+
+    print(env.H_x)
+    print()
+    print(env.H_z)
+
+    env.plot_tanner()
+
+    # Validate logical error
+    # logical_operation = np.zeros(env.n_data, dtype=np.int8)
+    # logical_operation[sample_config["logical_operators"]] = 1
+    # env.step(logical_operation)
+    #
+    # env.render()
 
 
 if __name__ == '__main__':
