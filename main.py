@@ -1,8 +1,7 @@
-from environments import MultivariateBicycleCode
-from utils import plot_results, adversarial_training_loop
+from environments import MultivariateBicycleCode, QLDPCCode
+from utils import *
 import sys
 import json
-
 
 def get_configs(model_config_file, code_config_file, agent_name, code_name):
     model_config = json.load(open(model_config_file))
@@ -24,11 +23,17 @@ if __name__ == '__main__':
 
     print_example_env(code_config)
 
-    pretraining_comparison = {}
+    # for error_rate in [0.01, 0.02, 0.035, 0.05, 0.075, 0.1]:
+    #     model_config["error_rate"] = error_rate
+    #     all_rewards = {}
+    #
+    #     for action_threshold in [0.5, 0.75, 0.9, 0.95, 0.99]:
+    #         print(f"\nTraining with action threshold {action_threshold}")
+    #         model_config["action_threshold"] = action_threshold
+    #         rewards = single_agent_training_loop(model_config=model_config, code_config=code_config)
+    #         all_rewards[action_threshold] = rewards["Defender"]
 
-    for pretrain_timesteps in [0, 10_000, 50_000, 100_000]:
-        rewards = adversarial_training_loop(model_config=model_config, code_config=code_config, pretrain_timesteps=pretrain_timesteps)
-        pretraining_comparison[pretrain_timesteps] = rewards
-
-
-    plot_results(pretraining_comparison, "results/pretrain.png")
+    # rewards = adversarial_training_loop(model_config=model_config, code_config=code_config)
+    rewards = single_agent_training_loop(code_config=code_config, model_config=model_config, model_checkpoint="checkpoints/sac_defender_single.zip")
+    plot_results(rewards, model_config, f"results/termination.png")
+    render_evaluation_episode(code_config, "checkpoints/sac_defender_single.zip")

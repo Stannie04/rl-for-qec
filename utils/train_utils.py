@@ -124,7 +124,6 @@ def adversarial_training_loop(
 
             # Required for SB3 replay buffer which expects info to be a list of dicts
             info = [info]
-
             actor.replay_buffer.add(obs, next_obs, action, reward, done, info)
 
             if step % model_config["train_frequency"] == 0:
