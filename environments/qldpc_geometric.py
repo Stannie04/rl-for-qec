@@ -5,17 +5,14 @@ import matplotlib.pyplot as plt
 
 class QLDPCCode(gym.Env):
 
-    def __init__(self, l: int, m: int, params = None, interaction_vectors=None,
-                 logical_operators=None, error_rate=None, # No defaults given so that they must be explicitly set in the config files,
-                 evaluation_mode=False, action_threshold=None,  # reducing bugs from forgetting to set them.
-                 termination_threshold=None, max_episode_length=None):
+    def __init__(self, l: int, m: int, **kwargs):
 
         super().__init__()
 
         self.l = l
         self.m = m
 
-        self.H_x, self.H_z = self._init_parity_check_matrices(params)
+        self.H_x, self.H_z = self._init_parity_check_matrices(kwargs.get("params"))
 
 
     def _init_parity_check_matrices(self, params):

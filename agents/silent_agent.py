@@ -3,11 +3,13 @@
 Acts as a parent class for future agents.
 """
 
+import numpy as np
 import gymnasium as gym
 
-class RandomAgent:
-    def __init__(self, env: gym.Env):
-        self.env = env
+class SilentAgent:
+
+    def __init__(self, **kwargs):
+        pass
 
     def select_action(self, observation):
-        return self.env.action_space.sample()
+        return np.zeros_like(observation, dtype=np.float32)

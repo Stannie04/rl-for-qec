@@ -2,10 +2,11 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 import numpy as np
 
-def plot_results(results, config, title="results/results.png"):
+def plot_results(results, baselines, config, title="results/results.png"):
 
     plt.figure(figsize=(12, 6))
     for name, runs in results.items():
+
         mean, ci95 = get_confidence_bounds(runs)
 
         x_len = len(mean)
@@ -15,6 +16,11 @@ def plot_results(results, config, title="results/results.png"):
 
         if len(runs) != 1:
             plt.fill_between(progress, mean - ci95, mean + ci95, alpha=0.3, label=f"{name} 95% CI")
+
+    for name, run in baselines.items():
+        line = [np.mean(run)]*config["num_timesteps"]
+        plt.plot(line, label=f"{name} Mean", linewidth=2, linestyle='--')
+
 
     plt.title("RL Agent Performance on Multivariate Bicycle Code Environment")
     plt.xlabel("Timestep")

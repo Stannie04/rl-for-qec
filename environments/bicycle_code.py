@@ -5,22 +5,20 @@ import numpy as np
 from typing import Optional
 # from .qubits import DataQubit, Stabilizer
 # import random
+import torch
 
 class MultivariateBicycleCode(gym.Env):
 
-    def __init__(self, l: int, m: int, interaction_vectors=None,
-                 logical_operators=None, error_rate=None, # No defaults given so that they must be explicitly set in the config files,
-                 evaluation_mode=False, action_threshold=None,  # reducing bugs from forgetting to set them.
-                 termination_threshold=None, max_episode_length=None):
+    def __init__(self, l: int, m: int, **kwargs):
 
         super().__init__()
 
-        self.error_rate = error_rate
-
-        self._init_qubits(l, m, interaction_vectors)
+        self.error_rate = kwargs.get("error_rate")
+        self._init_qubits(l, m, kwargs.get("interaction_vectors"))
 
         self.observation_space = gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.uint8)
         self.action_space = gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.float32)
+        # self.action_space = gym.spaces.MultiBinary(self.n_data)
 
         self.episode_steps = 0
         self.current_player = 0
@@ -28,34 +26,34 @@ class MultivariateBicycleCode(gym.Env):
         self.num_errors = 0
         self.info = None
         self.previous_info = None
-        self.logical_operators = logical_operators
+        self.logical_operators = kwargs.get("logical_operators")
 
-        self.max_episode_length = max_episode_length
-        self.evaluation_mode = evaluation_mode
-        self.action_threshold = action_threshold
-        self.termination_threshold = termination_threshold
+        self.max_episode_length = kwargs.get("max_episode_length")
+        self.evaluation_mode = kwargs.get("evaluation_mode")
+        self.action_threshold = kwargs.get("action_threshold")
+        self.termination_threshold = kwargs.get("termination_threshold")
 
 
     def step(self, action, single_player=True):
 
         self.previous_info = self._get_info()
-        # Intermediate visualization of the action
+
         if self.evaluation_mode:
-            print("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n")
+            print("\n=-=-=-=-=-=-=- Pre Action =-=-=-=-=-=-=-=-=-=\n")
             self.render()
 
-        error_locations = np.where(self.data_errors == 1)[0]
 
-        mask = action > self.action_threshold
+        mask = np.random.rand(self.n_data) < action
 
         self.data_errors[mask] = 1 - self.data_errors[mask]
         for i in range(self.n_data):
             if mask[i]:
                 self.stabilizer_states[self.qubits_to_stabilizers[i]] ^= 1
 
-        # Flip the assigned qubit.
-        # self.data_errors[action] = 1 - self.data_errors[action]
-        # self.stabilizer_states[self.qubits_to_stabilizers[action]] ^= 1
+        if self.evaluation_mode:
+            print("\n=-=-=-=-=-=-=- Post Action =-=-=-=-=-=-=-=-=-=\n")
+            self.render()
+
 
         # Check whether the episode is finished.
         self.episode_steps += 1
@@ -64,18 +62,7 @@ class MultivariateBicycleCode(gym.Env):
         truncated = self.episode_steps > self.max_episode_length
 
 
-        previous_errors = self.previous_info["num_errors"]
-        current_errors = self.info["num_errors"]
-
-        delta_errors = previous_errors - current_errors
-
-        # Calculate reward.
-        if single_player or self.current_player == 0:  # Defender
-            # The defender gets a positive reward for reducing the number of errors, and a negative reward for increasing it.
-            # Additionally, they get a large negative reward if the episode ends due to a logical error.
-            reward = 1 + delta_errors #- self.max_episode_length * terminated
-        else:  # Adversary
-            reward = -(delta_errors - self.max_episode_length * terminated)
+        reward = self._get_reward(mask)
 
 
         # Update state.
@@ -90,6 +77,7 @@ class MultivariateBicycleCode(gym.Env):
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = {}):
         super().reset(seed=seed)
+
 
         self.data_errors.fill(0)
         self.stabilizer_states.fill(0)
@@ -130,12 +118,16 @@ class MultivariateBicycleCode(gym.Env):
         # idx = np.random.randint(self.n_data)
         # self.data_errors[idx] = 1 - self.data_errors[idx]
         # self.stabilizer_states[self.qubits_to_stabilizers[idx]] ^= 1
+
+
         mask = np.random.rand(self.n_data) < self.error_rate
+
         self.data_errors[mask] = 1
 
         for i in range(self.n_data):
             if mask[i]:
                 self.stabilizer_states[self.qubits_to_stabilizers[i]] ^= 1
+
 
     def _init_qubits(self, l, m, interaction_vectors=None):
 
@@ -173,7 +165,7 @@ class MultivariateBicycleCode(gym.Env):
 
 
     def _get_obs(self):
-        return self.stabilizer_states
+        return self.stabilizer_states.astype(np.float32)
 
 
     def _get_info(self):
@@ -188,6 +180,23 @@ class MultivariateBicycleCode(gym.Env):
         """Check whether a logical error has occurred."""
 
         return self.info["num_errors"] > self.termination_threshold
+
+
+    def _get_reward(self, mask):
+
+        # Reward the agent for surviving longer.
+        reward = 1
+
+        # Reward the agent for reducing the number of errors, and penalize it for increasing them.
+        reward += (self.previous_info["num_errors"] - self.info["num_errors"]) * 0.1
+
+        # Penalize the agent for flipping many qubits at once, to encourage more targeted actions.
+        reward -= np.sum(mask) * 0.1
+
+        reward -= (np.sum(mask) ** 2) * 0.01
+
+
+        return reward
 
 
 
