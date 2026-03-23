@@ -2,17 +2,72 @@ import gymnasium as gym
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+from torch_geometric.data import Data
+import torch
 
 class QLDPCCode(gym.Env):
 
     def __init__(self, l: int, m: int, **kwargs):
 
         super().__init__()
+        self.device = kwargs.get("device", "cpu")
 
-        self.l = l
-        self.m = m
+        self.l, self.m = l, m
+        self.n_data, self.n_stabilizers = 2*l*m, 2*l*m
+
+        self.error_rate = kwargs.get("error_rate", 0.05)
 
         self.H_x, self.H_z = self._init_parity_check_matrices(kwargs.get("params"))
+
+        self.graph, self.data, self.node_to_index = self._init_graph()
+
+        self.action_space = gym.spaces.Discrete(self.n_data)
+        self.observation_space = gym.spaces.Dict({
+            "x": gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.int8),
+            "edge_index": gym.spaces.Box(0, self.data.x.shape[0], shape=self.data.edge_index.shape, dtype=np.int64),
+        })
+
+        self.errors = np.zeros(self.n_data, dtype=np.int8)
+
+        self.episode_steps = 0
+        self.max_episode_length = kwargs.get("max_episode_length", 100)
+        self.termination_threshold = kwargs.get("termination_threshold", 10)
+        self.logical_operators = kwargs.get("logical_operators", [])
+
+
+    @property
+    def syndrome(self):
+        # Get the current syndrome based on the errors and the parity check matrices.
+
+        # NOTE: Currently only working with X flips (Z errors).
+        return self.H_z @ self.errors % 2
+
+
+    @property
+    def observation(self):
+        # The observation is in the form of the node features of the graph.
+        # This includes the error rate for qubit nodes, and the syndrome for check nodes.
+        # Note that the physical errors are not directly observable.
+
+        return {
+            "x": self.data.x.clone(),
+            "edge_index": self.data.edge_index.clone()
+        }
+
+
+    @property
+    def reward(self):
+        return 1
+
+
+    @property
+    def terminated(self):
+        return sum(self.errors) < self.termination_threshold
+
+
+    @property
+    def truncated(self):
+        return self.episode_steps >= self.max_episode_length
 
 
     def _init_parity_check_matrices(self, params):
@@ -41,7 +96,9 @@ class QLDPCCode(gym.Env):
         return np.hstack([A, B]), np.hstack([B.T, A.T])
 
 
-    def plot_tanner(self):
+    def _init_graph(self):
+
+        ## Create a bipartite Tanner graph from the parity check matrices H_x and H_z in networkx.
 
         G = nx.Graph()
 
@@ -49,13 +106,13 @@ class QLDPCCode(gym.Env):
         n_z, _ = self.H_z.shape
 
         for q in range(n_qubits):
-            G.add_node(f"q{q}", node_type="qubit")
+            G.add_node(f"q{q}", node_type="qubit", layer=1)
 
         for i in range(n_x):
-            G.add_node(f"x{i}", node_type="xcheck")
+            G.add_node(f"x{i}", node_type="x_check", layer=0)
 
         for i in range(n_z):
-            G.add_node(f"z{i}", node_type="zcheck")
+            G.add_node(f"z{i}", node_type="z_check", layer=2)
 
         for i in range(n_x):
             for j in range(n_qubits):
@@ -67,37 +124,119 @@ class QLDPCCode(gym.Env):
                 if self.H_z[i, j] == 1:
                     G.add_edge(f"z{i}", f"q{j}")
 
-        # --- Layout ---
-        pos = nx.spring_layout(G, seed=42)
+
+        ## Turn the graph into a PyG Data object.
+
+        node_list = list(G.nodes)
+        node_to_index = {n: i for i, n in enumerate(node_list)}
+
+        # One-hot encode node types, plus additional feature specific to qubit type
+        x = []
+        for n in node_list:
+            node_type = G.nodes[n]["node_type"]
+            if node_type == "qubit":
+                x.append([1, 0, 0, self.error_rate])
+            elif node_type == "x_check":
+                x.append([0, 1, 0, 0])  # Final feature encodes the measurement outcome, which is 0 for all nodes at initialization (no errors)
+            elif node_type == "z_check":
+                x.append([0, 0, 1, 0])  # Final feature encodes the measurement outcome, which is 0 for all nodes at initialization (no errors)
+            else:
+                raise ValueError("Unknown node type")
+        x = torch.tensor(x, dtype=torch.float32, device=self.device)
+
+        # Encode Edges
+        edge_index = []
+        for u, v in G.edges:
+            edge_index.append([node_to_index[u], node_to_index[v]])
+            edge_index.append([node_to_index[v], node_to_index[u]])  # Undirected graph, add both directions
+        edge_index = torch.tensor(edge_index, dtype=torch.long, device=self.device).t().contiguous()
+        data = Data(x=x, edge_index=edge_index)
+
+
+        return G, data, node_to_index
+
+
+    def _update_graph(self):
+        x = self.data.x.clone()
+
+        for q in range(self.n_data):
+            x[self.node_to_index[f"q{q}"], 3] = self.errors[q]
+
+        for i in range(self.H_x.shape[0]):
+            x[self.node_to_index[f"x{i}"], 3] = self.syndrome[i]
+
+        for i in range(self.H_z.shape[0]):
+            x[self.node_to_index[f"z{i}"], 3] = self.syndrome[i]
+
+        self.data.x = x
+
+
+    def _flip_randomly(self):
+        # Randomly flip one or more bits according to the error rate.
+        mask = np.random.rand(self.n_data) < self.error_rate
+        self.errors[mask] ^= 1
+
+
+    def reset(self, seed=None, options=None):
+        self.errors = np.zeros(self.n_data, dtype=np.int8)
+        self.episode_steps = 0
+
+        self._flip_randomly()
+
+        self._update_graph()
+
+        return self.observation, {}
+
+
+    def step(self, action):
+        self.errors[action] ^= 1
+
+        reward = self.reward
+
+        self._flip_randomly()
+
+        self._update_graph()
+
+        return self.observation, reward, self.terminated, self.truncated, {}
+
+
+    def render(self, mode="human"):
+
+        pos = nx.multipartite_layout(self.graph, subset_key="layer")
 
         # Separate node lists
-        qubits = [n for n in G.nodes if G.nodes[n]["node_type"] == "qubit"]
-        xchecks = [n for n in G.nodes if G.nodes[n]["node_type"] == "xcheck"]
-        zchecks = [n for n in G.nodes if G.nodes[n]["node_type"] == "zcheck"]
+        qubits = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "qubit"]
+        x_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "x_check"]
+        z_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "z_check"]
+
+        qubit_colors = ["orange" if self.errors[int(n[1:])] == 1 else "black" for n in qubits]
+        x_check_colors = ["red" if self.data.x[self.node_to_index[n], 3] == 1 else "lightcoral" for n in x_checks]
+        z_check_colors = ["blue" if self.data.x[self.node_to_index[n], 3] == 1 else "lightblue" for n in z_checks]
+
 
         plt.figure(figsize=(10, 8))
 
         # Draw edges
-        nx.draw_networkx_edges(G, pos, alpha=0.3)
+        nx.draw_networkx_edges(self.graph, pos, alpha=0.3)
 
         # Draw nodes by type (different shapes & colors)
-        nx.draw_networkx_nodes(G, pos,
+        nx.draw_networkx_nodes(self.graph, pos,
                                nodelist=qubits,
-                               node_color="black",
+                               node_color=qubit_colors,
                                node_shape="o",
                                node_size=200,
                                label="Data qubits")
 
-        nx.draw_networkx_nodes(G, pos,
-                               nodelist=xchecks,
-                               node_color="red",
+        nx.draw_networkx_nodes(self.graph, pos,
+                               nodelist=x_checks,
+                               node_color=x_check_colors,
                                node_shape="s",
                                node_size=300,
                                label="X checks")
 
-        nx.draw_networkx_nodes(G, pos,
-                               nodelist=zchecks,
-                               node_color="blue",
+        nx.draw_networkx_nodes(self.graph, pos,
+                               nodelist=z_checks,
+                               node_color=z_check_colors,
                                node_shape="^",
                                node_size=300,
                                label="Z checks")
@@ -105,7 +244,12 @@ class QLDPCCode(gym.Env):
         plt.legend(scatterpoints=1)
         plt.axis("off")
         plt.title("CSS Tanner Graph (Bicycle Code)")
+
         plt.show()
+
+        # net = Network(notebook=True)
+        # net.from_nx(G)
+        # net.show("tanner_graph.html")
 
 
 if __name__ == "__main__":
