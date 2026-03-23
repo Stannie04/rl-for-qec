@@ -17,7 +17,8 @@ class MultivariateBicycleCode(gym.Env):
         self._init_qubits(l, m, kwargs.get("interaction_vectors"))
 
         self.observation_space = gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.uint8)
-        self.action_space = gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.float32)
+        self.action_space = gym.spaces.Discrete(self.n_data+1)
+        # self.action_space = gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.float32)
         # self.action_space = gym.spaces.MultiBinary(self.n_data)
 
         self.episode_steps = 0
@@ -41,7 +42,6 @@ class MultivariateBicycleCode(gym.Env):
         if self.evaluation_mode:
             print("\n=-=-=-=-=-=-=- Pre Action =-=-=-=-=-=-=-=-=-=\n")
             self.render()
-
 
         mask = np.random.rand(self.n_data) < action
 
@@ -190,10 +190,8 @@ class MultivariateBicycleCode(gym.Env):
         # Reward the agent for reducing the number of errors, and penalize it for increasing them.
         reward += (self.previous_info["num_errors"] - self.info["num_errors"]) * 0.1
 
-        # Penalize the agent for flipping many qubits at once, to encourage more targeted actions.
-        reward -= np.sum(mask) * 0.1
-
-        reward -= (np.sum(mask) ** 2) * 0.01
+        # Penalize the agent for having many errors, to encourage it to keep the system clean.
+        reward -= 0.1 * self.info["num_errors"]
 
 
         return reward
