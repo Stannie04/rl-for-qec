@@ -22,17 +22,15 @@ class QLDPCCode(gym.Env):
         self.graph, self.data, self.node_to_index = self._init_graph()
 
         self.action_space = gym.spaces.Discrete(self.n_data)
-        self.observation_space = gym.spaces.Dict({
-            "x": gym.spaces.Box(0, 1, shape=(self.n_data,), dtype=np.int8),
-            "edge_index": gym.spaces.Box(0, self.data.x.shape[0], shape=self.data.edge_index.shape, dtype=np.int64),
-        })
-
         self.errors = np.zeros(self.n_data, dtype=np.int8)
 
         self.episode_steps = 0
         self.max_episode_length = kwargs.get("max_episode_length", 100)
         self.termination_threshold = kwargs.get("termination_threshold", 10)
         self.logical_operators = kwargs.get("logical_operators", [])
+
+        self.previous_num_errors = 0
+        self.previous_num_syndromes = 0
 
 
     @property
@@ -49,20 +47,27 @@ class QLDPCCode(gym.Env):
         # This includes the error rate for qubit nodes, and the syndrome for check nodes.
         # Note that the physical errors are not directly observable.
 
-        return {
-            "x": self.data.x.clone(),
-            "edge_index": self.data.edge_index.clone()
-        }
+        return self.data
 
+    def get_reward(self, num_syndromes, num_errors):
+        # Reward the agent for surviving
+        r = 1
 
-    @property
-    def reward(self):
-        return 1
+        # Penalize remaining syndrome and physical errors
+        r -= 0.25 * (num_syndromes - self.previous_num_syndromes)
+        r -= 0.05 * (num_errors - self.previous_num_errors)
+
+        # If syndrome cleared, give a large positive reward for successful decode,
+        # but large negative reward if a logical operator is triggered.
+        if num_syndromes == 0:
+            r += 10.0 if num_errors == 0 else -10.0
+
+        return float(r)
 
 
     @property
     def terminated(self):
-        return sum(self.errors) < self.termination_threshold
+        return sum(self.errors) > self.termination_threshold
 
 
     @property
@@ -180,6 +185,8 @@ class QLDPCCode(gym.Env):
     def reset(self, seed=None, options=None):
         self.errors = np.zeros(self.n_data, dtype=np.int8)
         self.episode_steps = 0
+        self.previous_num_errors = 0
+        self.previous_num_syndromes = 0
 
         self._flip_randomly()
 
@@ -191,7 +198,11 @@ class QLDPCCode(gym.Env):
     def step(self, action):
         self.errors[action] ^= 1
 
-        reward = self.reward
+        num_syndromes = self.syndrome.sum()
+        num_errors = self.errors.sum()
+        reward = self.get_reward(num_syndromes, num_errors)
+        self.previous_num_errors = num_errors
+        self.previous_num_syndromes = num_syndromes
 
         self._flip_randomly()
 

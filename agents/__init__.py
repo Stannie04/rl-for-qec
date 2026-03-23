@@ -1,2 +1,3 @@
 from .silent_agent import SilentAgent
-from .gnn import GNNAgent
+from .gnn import GNN
+from .dqn import DQNAgent

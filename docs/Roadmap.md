@@ -1,6 +1,5 @@
 # Near-term Roadmap
-- Evaluate the performance of different types of multivariate bicycle codes.
-- Evaluate the use of GNNs as function approximators for RL agents in this context.
+- Improve the effectiveness and efficiency of the GNN-based agent.
 
 # Long-term ideas
 - Implement curriculum learning strategies to progressively train agents on more complex codes.

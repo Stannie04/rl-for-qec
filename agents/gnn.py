@@ -3,7 +3,7 @@ from torch import nn
 import torch
 
 
-class GNNAgent(torch.nn.Module):
+class GNN(torch.nn.Module):
     """
     GNN with several consecutive GraphConv layers, whose final output is
     converted to a single graph embedding (feature vector) with global_mean_pool.
@@ -43,7 +43,6 @@ class GNNAgent(torch.nn.Module):
 
 
     def forward(self, data):
-
         x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
 
         #  node embeddings

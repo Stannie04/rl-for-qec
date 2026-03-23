@@ -41,8 +41,7 @@
       ],
 
       "error_rate": 3.29e-2,
-      "termination_threshold": 5,
-      "action_threshold": 0.75,
+      "termination_threshold": 10,
       "max_episode_length": 1000,
 
       "logical_operators":

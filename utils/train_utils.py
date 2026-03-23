@@ -6,7 +6,8 @@ from stable_baselines3 import DQN, PPO, SAC
 from stable_baselines3.common.callbacks import BaseCallback
 import optuna
 
-from environments import MultivariateBicycleCode
+from environments import MultivariateBicycleCode, QLDPCCode
+from agents import DQNAgent
 
 import json
 
@@ -70,7 +71,7 @@ def single_agent_training_loop(
     rewards = {"Defender": []}
     for _ in range(model_config["n_repetitions"]):
 
-        env = MultivariateBicycleCode(**code_config)
+        env = QLDPCCode(**code_config)
 
         defender, adversary = initialize_agents(model_config["params"], env)
 
@@ -185,3 +186,50 @@ def objective(trial: optuna.Trial, model_config, code_config) -> float:
     mean_reward = np.mean(callback.episode_rewards[-100:])
 
     return mean_reward
+
+
+
+def train_dqn(code_config, model_config, device):
+    num_timesteps = model_config["num_timesteps"]
+
+    env = QLDPCCode(**code_config, device=device)
+    agent = DQNAgent(env, device=device, **model_config["params"], num_timesteps=num_timesteps)
+
+    all_rewards = []
+    all_lengths = []
+
+    for _ in range(model_config["n_repetitions"]):
+
+        rewards = []
+        lengths = []
+        obs, info = env.reset()
+        episode_length = 0.0
+        pbar = tqdm(range(num_timesteps))
+        for step in pbar:
+
+            action = agent.select_action(obs)
+
+            next_obs, reward, terminated, truncated, info = env.step(action)
+
+            episode_length += 1
+
+            agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
+            obs = next_obs
+
+            agent.train_step()
+
+            rewards.append(reward)
+
+            if terminated or truncated:
+                obs, info = env.reset()
+                pbar.set_description(f"{step}, Episode Length: {episode_length:.2f}")
+                lengths.append(episode_length)
+                episode_length = 0.0
+
+            if (step + 1) % agent.target_update_freq == 0:
+                agent.target_model.load_state_dict(agent.model.state_dict())
+
+        all_lengths.append(lengths)
+        all_rewards.append(rewards)
+
+    return {"Length": all_lengths, "Reward": all_rewards}
