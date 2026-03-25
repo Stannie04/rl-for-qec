@@ -168,24 +168,71 @@ def sample_sac_params(trial: optuna.Trial) -> dict:
     }
 
 
-def objective(trial: optuna.Trial, model_config, code_config) -> float:
+def sample_dqn_params(trial: optuna.Trial) -> dict:
+    """
+    Define the search space for DQN hyperparameters.
+    """
+    return {
+        "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256, 512]),
+        "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
+        "buffer_size": trial.suggest_categorical("buffer_size", [100000, 200000, 500000]),
+        "gamma": trial.suggest_float("gamma", 0.95, 0.999),
+        "train_freq": trial.suggest_categorical("train_freq", [1, 4, 8]),
+        "gradient_steps": trial.suggest_categorical("gradient_steps", [1, 4, 8]),
+        "target_update_freq": trial.suggest_categorical("target_update_freq", [1000, 5000, 10000]),
+    }
+
+
+def objective(trial: optuna.Trial, code_config) -> float:
     """
     Objective function for Optuna.
     """
-    env = MultivariateBicycleCode(**code_config)
+    env = QLDPCCode(**code_config, device='cuda')
 
     # Sample hyperparameters
-    hyperparams = sample_sac_params(trial)
-    model = SAC("MlpPolicy", env, verbose=0, **hyperparams)
+    hyperparams = sample_dqn_params(trial)
+    agent = DQNAgent(env=env, **hyperparams, device='cuda')
 
     # Train
-    callback = RewardTrackerCallback()
-    model.learn(total_timesteps=50_000, callback=callback)
+    rewards = []
+    lengths = []
+    obs, info = env.reset()
+    episode_length = 0.0
+    for step in range(100_000):
+
+        action = agent.select_action(obs)
+
+        next_obs, reward, terminated, truncated, info = env.step(action)
+
+        episode_length += 1
+
+        agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
+        obs = next_obs
+
+        agent.train_step()
+
+        rewards.append(reward)
+
+        if terminated or truncated:
+            obs, info = env.reset()
+            lengths.append(episode_length)
+            episode_length = 0.0
+
+        if (step + 1) % agent.target_update_freq == 0:
+            agent.target_model.load_state_dict(agent.model.state_dict())
 
     # Evaluate mean reward over last 100 episodes
-    mean_reward = np.mean(callback.episode_rewards[-100:])
+    mean_reward = np.mean(lengths[:100])
 
     return mean_reward
+
+
+def optimize_hyperparameters(code_config, n_trials=50):
+    study = optuna.create_study(direction="maximize")
+    study.optimize(lambda trial: objective(trial, code_config), n_trials=n_trials)
+
+    print("Best hyperparameters:", study.best_params)
+    return study.best_params
 
 
 
