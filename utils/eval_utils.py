@@ -1,15 +1,17 @@
 from stable_baselines3 import SAC
-from environments import MultivariateBicycleCode
-from agents import SilentAgent
+from environments import QLDPCCode
+from agents import SilentAgent, DQNAgent
 from tqdm import tqdm
 import numpy as np
+import time
+from prettytable import PrettyTable
 
 
 def render_evaluation_episode(code_config, model_checkpoint, max_episode_steps=100):
 
     model = SAC.load(model_checkpoint, device="cuda")
 
-    env = MultivariateBicycleCode(**code_config, evaluation_mode=True)
+    env = QLDPCCode(**code_config, evaluation_mode=True)
 
     obs, info = env.reset()
     env.render()
@@ -35,7 +37,7 @@ def run_baselines(
     silent_agent = SilentAgent(**model_config)
 
     for agent, name in [(silent_agent, "Silent Agent")]:
-        env = MultivariateBicycleCode(**code_config)
+        env = QLDPCCode(**code_config, evaluation_mode=True)
 
         total_rewards = []
         for i in tqdm(range(100_000), desc=f"Evaluating {name}"):
@@ -52,3 +54,57 @@ def run_baselines(
             total_rewards.append(total_reward)
 
         return {name: total_rewards}
+
+
+def benchmark_env(code_config, device="cpu"):
+
+    sample_config = code_config.copy()
+
+    start = time.time()
+    env = QLDPCCode(**sample_config, device=device)
+    agent = DQNAgent(env, device=device)
+    end = time.time()
+    print(f"Initialization took {end - start:.5f} seconds")
+
+    obs, info = env.reset()
+
+    step_times = []
+    agent_times = []
+    buffer_times = []
+    train_times = []
+    loop_times = []
+    for _ in tqdm(range(1000), desc="Benchmarking environment and agent"):
+
+        loop_start = time.time()
+        action = agent.select_action(obs)
+        end = time.time()
+        agent_times.append(end - loop_start)
+
+        start = time.time()
+        next_obs, reward, terminated, truncated, info = env.step(action)
+        end = time.time()
+        step_times.append(end - start)
+
+        start = time.time()
+        agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
+        end = time.time()
+        buffer_times.append(end - start)
+
+        start = time.time()
+        agent.train_step()
+        loop_end = time.time()
+        train_times.append(loop_end - start)
+
+        obs = next_obs
+        loop_times.append(loop_end - loop_start)
+
+
+    t = PrettyTable(["Component", "Avg Time (s)", "it/s"])
+
+    t.add_row(["Environment Step", f"{np.mean(step_times[1:]):.5f}", f"{1/np.mean(step_times[1:]):.2f}"])
+    t.add_row(["Agent Action Selection", f"{np.mean(agent_times[1:]):.5f}", f"{1/np.mean(agent_times[1:]):.2f}"])
+    t.add_row(["Buffer Push", f"{np.mean(buffer_times[1:]):.5f}", f"{1/np.mean(buffer_times[1:]):.2f}"])
+    t.add_row(["Agent Training Step", f"{np.mean(train_times[1:]):.5f}", f"{1/np.mean(train_times[1:]):.2f}"])
+    t.add_row(["Total Loop", f"{np.mean(loop_times[1:]):.5f}", f"{1/np.mean(loop_times[1:]):.2f}"])
+
+    print(t)

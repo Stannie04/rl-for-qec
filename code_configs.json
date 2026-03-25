@@ -2,10 +2,7 @@
     "114_12_12": {
         "l": 12,
         "m": 6,
-        "interaction_vectors": [
-            [3, 6],
-            [6, 3]
-        ],
+
       "logical_operators":
         [3, 18, 41, 75, 76, 88, 99, 114, 123, 124, 136, 137],
 
@@ -19,9 +16,6 @@
     "multivariate": {
       "l": 5,
       "m": 3,
-      "interaction_vectors": [
-          [3, 4]
-      ],
 
       "error_rate": 0.001,
       "termination_threshold": 5,
@@ -35,14 +29,10 @@
     "18_4_4": {
       "l": 3,
       "m": 3,
-      "interaction_vectors": [
-          [-1, -2],
-          [2, 1]
-      ],
 
       "error_rate": 3.29e-2,
       "termination_threshold": 10,
-      "max_episode_length": 1000,
+      "max_episode_length": 100,
 
       "logical_operators":
         [15, 9, 16, 0],
