@@ -1,10 +1,12 @@
 {
-    "114_12_12": {
+    "144_12_12_ldpc": {
+
+        "n": 144,
+        "k": 12,
+        "d": 12,
+
         "l": 12,
         "m": 6,
-
-      "logical_operators":
-        [3, 18, 41, 75, 76, 88, 99, 114, 123, 124, 136, 137],
 
       "params": {
         "A": [[3, 0], [0,1], [0,2]],
@@ -13,33 +15,42 @@
 
     },
 
-    "multivariate": {
-      "l": 5,
-      "m": 3,
 
-      "error_rate": 0.001,
-      "termination_threshold": 5,
-      "action_threshold": 0.75,
-      "max_episode_length": 1000,
+    "18_4_4_ldpc": {
 
-      "logical_operators":
-          [1, 8, 9, 11, 21, 23]
-    },
+      "n": 18,
+      "k": 4,
+      "d": 4,
 
-    "18_4_4": {
       "l": 3,
       "m": 3,
 
       "error_rate": 3.29e-2,
-      "termination_threshold": 10,
       "max_episode_length": 100,
-
-      "logical_operators":
-        [15, 9, 16, 0],
 
       "params":{
         "A": [[1, 0], [0, 0], [0, 2]],
         "B": [[0, 1], [0, 0], [2, 0]]
       }
-    }
+    },
+
+   "18_2_3_toric": {
+
+     "n": 18,
+     "k": 2,
+     "d": 3,
+
+     "l": 3,
+     "m": 3,
+
+    "error_rate": 3.29e-2,
+    "max_episode_length": 100,
+
+     "params":{
+       "A": [[1, 0], [0, 0]],
+       "B": [[0, 1], [0, 0]]
+     }
+
+   }
+
 }
