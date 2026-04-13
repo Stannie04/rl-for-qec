@@ -1,4 +1,3 @@
-
 from tqdm import tqdm
 import numpy as np
 import time
@@ -199,14 +198,11 @@ def objective(trial: optuna.Trial, code_config) -> float:
     rewards = []
     lengths = []
     obs, info = env.reset()
-    episode_length = 0.0
     for step in range(100_000):
 
         action = agent.select_action(obs)
 
         next_obs, reward, terminated, truncated, info = env.step(action)
-
-        episode_length += 1
 
         agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
         obs = next_obs

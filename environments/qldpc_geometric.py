@@ -92,7 +92,7 @@ class QLDPCCode(gym.Env):
         # Get the current syndrome based on the errors and the parity check matrices.
 
         # NOTE: Currently only working with X flips (Z errors).
-        return self.H_z @ self.errors % 2
+        return torch.sum(self.H_z & self.errors, dim=1) % 2
 
 
     @property
@@ -103,25 +103,10 @@ class QLDPCCode(gym.Env):
 
         return self.data
 
-    def get_reward(self, num_syndromes, num_errors):
-        # Reward the agent for surviving
-        r = 1
-
-        # Penalize remaining syndrome and physical errors
-        r -= 0.25 * (num_syndromes - self.previous_num_syndromes)
-        r -= 0.05 * (num_errors - self.previous_num_errors)
-
-        # If syndrome cleared, give a large positive reward for successful decode,
-        # but large negative reward if a logical operator is triggered.
-        if num_syndromes == 0:
-            r += 10.0 if num_errors == 0 else -10.0
-
-        return float(r)
-
 
     @property
     def terminated(self):
-        return sum(self.errors) > self.termination_threshold
+        return self.errors.sum() == 0 or self.syndrome.sum() == 0
 
 
     @property
