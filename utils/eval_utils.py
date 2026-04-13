@@ -1,9 +1,11 @@
 from stable_baselines3 import SAC
-from environments import QLDPCCode
+from environments import QLDPCTrainEnv, QLDPCEvalEnv
 from agents import SilentAgent, DQNAgent
 from tqdm import tqdm
 import numpy as np
 import time
+
+import jax
 from prettytable import PrettyTable
 
 
@@ -11,7 +13,7 @@ def render_evaluation_episode(code_config, model_checkpoint, max_episode_steps=1
 
     model = SAC.load(model_checkpoint, device="cuda")
 
-    env = QLDPCCode(**code_config, evaluation_mode=True)
+    env = QLDPCTrainEnv(**code_config, evaluation_mode=True)
 
     obs, info = env.reset()
     env.render()
@@ -37,10 +39,10 @@ def run_baselines(
     silent_agent = SilentAgent(**model_config)
 
     for agent, name in [(silent_agent, "Silent Agent")]:
-        env = QLDPCCode(**code_config, evaluation_mode=True)
+        env = QLDPCEvalEnv(**code_config, evaluation_mode=True)
 
         total_rewards = []
-        for i in tqdm(range(100_000), desc=f"Evaluating {name}"):
+        for i in tqdm(range(10_000), desc=f"Evaluating {name}"):
             obs, info = env.reset()
             done = False
             total_reward = 0
@@ -48,7 +50,7 @@ def run_baselines(
             while not done:
                 action = agent.select_action(obs)
                 obs, reward, terminated, truncated, info = env.step(action)
-                total_reward += 1 # Ignore reward structure, just measure how long it takes for the agent to fail.
+                total_reward += reward
                 done = terminated or truncated
 
             total_rewards.append(total_reward)
@@ -56,13 +58,41 @@ def run_baselines(
         return {name: total_rewards}
 
 
-def benchmark_env(code_config, device="cpu"):
+def benchmark_jax_env(code_config, device="cpu"):
 
     sample_config = code_config.copy()
 
     start = time.time()
-    env = QLDPCCode(**sample_config, device=device)
-    agent = DQNAgent(env, device=device)
+    env = JaxQLDPCCode(**sample_config, device=device)
+    end = time.time()
+    print(f"Initialization took {end - start:.5f} seconds")
+
+    key = jax.random.PRNGKey(0)
+    obs, key = env.reset(key)
+
+    step_times = []
+    for _ in tqdm(range(1000), desc="Benchmarking JAX environment"):
+
+        start = time.time()
+        obs, key = env.step(obs, key)
+        end = time.time()
+        step_times.append(end - start)
+
+    t = PrettyTable(["Component", "Avg Time (s)", "it/s"])
+    t.add_row(["Environment Step", f"{np.mean(step_times[1:]):.5f}", f"{1/np.mean(step_times[1:]):.2f}"])
+    print(t)
+
+
+
+def benchmark_env(code_config, model_config, device="cpu"):
+
+    sample_config = code_config.copy()
+
+    start = time.time()
+    env = QLDPCEvalEnv(**sample_config, device=device, assert_env=True)
+    env.render(mode="edge_info")
+
+    agent = DQNAgent(env, **model_config["params"], device=device)
     end = time.time()
     print(f"Initialization took {end - start:.5f} seconds")
 
@@ -73,7 +103,7 @@ def benchmark_env(code_config, device="cpu"):
     buffer_times = []
     train_times = []
     loop_times = []
-    for _ in tqdm(range(1000), desc="Benchmarking environment and agent"):
+    for _ in tqdm(range(10_000), desc="Benchmarking environment and agent"):
 
         loop_start = time.time()
         action = agent.select_action(obs)
@@ -108,3 +138,22 @@ def benchmark_env(code_config, device="cpu"):
     t.add_row(["Total Loop", f"{np.mean(loop_times[1:]):.5f}", f"{1/np.mean(loop_times[1:]):.2f}"])
 
     print(t)
+
+
+def evaluate_agent(code_config, model_params, device, state_dict):
+    env = QLDPCEvalEnv(**code_config, device=device)
+    agent = DQNAgent(env, device=device, evaluation_mode=True, **model_params)
+    agent.model.load_state_dict(state_dict)
+
+    obs, info = env.reset()
+    done = False
+
+    episode_length = 0
+    while not done:
+        action = agent.select_action(obs)
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+        episode_length += 1
+
+
+    return episode_length

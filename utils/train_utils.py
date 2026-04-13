@@ -6,8 +6,9 @@ from stable_baselines3 import DQN, PPO, SAC
 from stable_baselines3.common.callbacks import BaseCallback
 import optuna
 
-from environments import MultivariateBicycleCode, QLDPCCode
+from environments import QLDPCTrainEnv
 from agents import DQNAgent
+from .eval_utils import evaluate_agent
 
 import json
 
@@ -71,7 +72,7 @@ def single_agent_training_loop(
     rewards = {"Defender": []}
     for _ in range(model_config["n_repetitions"]):
 
-        env = QLDPCCode(**code_config)
+        env = QLDPCTrainEnv(**code_config)
 
         defender, adversary = initialize_agents(model_config["params"], env)
 
@@ -99,7 +100,7 @@ def adversarial_training_loop(
 
     for _ in range(model_config["n_repetitions"]):
 
-        env = MultivariateBicycleCode(**code_config)
+        env = QLDPCTrainEnv(**code_config)
 
         defender, adversary = initialize_agents(model_config, env)
 
@@ -180,6 +181,7 @@ def sample_dqn_params(trial: optuna.Trial) -> dict:
         "train_freq": trial.suggest_categorical("train_freq", [1, 4, 8]),
         "gradient_steps": trial.suggest_categorical("gradient_steps", [1, 4, 8]),
         "target_update_freq": trial.suggest_categorical("target_update_freq", [1000, 5000, 10000]),
+        "epsilon_decay": trial.suggest_categorical("epsilon_decay", [1000, 5000, 10000, 50000, 100000]),
     }
 
 
@@ -187,7 +189,7 @@ def objective(trial: optuna.Trial, code_config) -> float:
     """
     Objective function for Optuna.
     """
-    env = QLDPCCode(**code_config, device='cuda')
+    env = QLDPCTrainEnv(**code_config, device='cuda')
 
     # Sample hyperparameters
     hyperparams = sample_dqn_params(trial)
@@ -215,19 +217,21 @@ def objective(trial: optuna.Trial, code_config) -> float:
 
         if terminated or truncated:
             obs, info = env.reset()
-            lengths.append(episode_length)
-            episode_length = 0.0
+
+        if step % agent.eval_freq == 0:
+            lengths.append(evaluate_agent(code_config, hyperparams, 'cuda', agent.model.state_dict()))
 
         if (step + 1) % agent.target_update_freq == 0:
             agent.target_model.load_state_dict(agent.model.state_dict())
 
     # Evaluate mean reward over last 100 episodes
-    mean_reward = np.mean(lengths[:100])
+    eval_len = min(100, len(lengths))
+    mean_reward = np.mean(lengths[:eval_len])
 
     return mean_reward
 
 
-def optimize_hyperparameters(code_config, n_trials=50):
+def optimize_hyperparameters(code_config, n_trials=100):
     study = optuna.create_study(direction="maximize")
     study.optimize(lambda trial: objective(trial, code_config), n_trials=n_trials)
 
@@ -239,7 +243,7 @@ def optimize_hyperparameters(code_config, n_trials=50):
 def train_dqn(code_config, model_config, device):
     num_timesteps = model_config["num_timesteps"]
 
-    env = QLDPCCode(**code_config, device=device)
+    env = QLDPCTrainEnv(**code_config, device=device)
     agent = DQNAgent(env, device=device, **model_config["params"], num_timesteps=num_timesteps)
 
     all_rewards = []
@@ -250,15 +254,13 @@ def train_dqn(code_config, model_config, device):
         rewards = []
         lengths = []
         obs, info = env.reset()
-        episode_length = 0.0
-        pbar = tqdm(range(num_timesteps))
+
+        pbar = tqdm(range(num_timesteps), desc="Training DQN Agent")
         for step in pbar:
 
             action = agent.select_action(obs)
 
             next_obs, reward, terminated, truncated, info = env.step(action)
-
-            episode_length += 1
 
             agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
             obs = next_obs
@@ -269,14 +271,19 @@ def train_dqn(code_config, model_config, device):
 
             if terminated or truncated:
                 obs, info = env.reset()
-                pbar.set_description(f"{step}, Episode Length: {episode_length:.2f}")
-                lengths.append(episode_length)
-                episode_length = 0.0
 
             if (step + 1) % agent.target_update_freq == 0:
                 agent.target_model.load_state_dict(agent.model.state_dict())
 
+            if step % agent.eval_freq == 0:
+                state_dict = agent.model.state_dict()
+                episode_length = evaluate_agent(code_config, model_config, device, state_dict)
+                pbar.set_description(f"Step {step} - Eval Episode Length: {episode_length}")
+                lengths.append([episode_length])
+
         all_lengths.append(lengths)
         all_rewards.append(rewards)
 
+    np.save("results/dqn_rewards_toric.npy", all_rewards)
+    np.save("results/dqn_lengths_toric.npy", all_lengths)
     return {"Length": all_lengths, "Reward": all_rewards}

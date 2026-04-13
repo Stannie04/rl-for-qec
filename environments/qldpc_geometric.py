@@ -98,7 +98,10 @@ class QLDPCCode(gym.Env):
         A = __polynomial_to_matrix(params["A"], x, y)
         B = __polynomial_to_matrix(params["B"], x, y)
 
-        return np.hstack([A, B]), np.hstack([B.T, A.T])
+        H_x = np.hstack([A, B])
+        H_z = np.hstack([B.T, A.T])
+
+        return torch.tensor(H_x, dtype=torch.int32, device=self.device), torch.tensor(H_z, dtype=torch.int32, device=self.device)
 
 
     def _init_graph(self):
@@ -162,28 +165,32 @@ class QLDPCCode(gym.Env):
 
 
     def _update_graph(self):
-        x = self.data.x.clone()
 
-        for q in range(self.n_data):
-            x[self.node_to_index[f"q{q}"], 3] = self.errors[q]
-
-        for i in range(self.H_x.shape[0]):
-            x[self.node_to_index[f"x{i}"], 3] = self.syndrome[i]
-
-        for i in range(self.H_z.shape[0]):
-            x[self.node_to_index[f"z{i}"], 3] = self.syndrome[i]
-
-        self.data.x = x
+        syndrome = self.syndrome
+        # self.data.x[self.q_idx, 3] = self.errors
+        self.data.x[self.x_idx, 3] = syndrome.float()
+        # self.data.x[self.z_idx, 3] = syndrome
 
 
     def _flip_randomly(self):
         # Randomly flip one or more bits according to the error rate.
-        mask = np.random.rand(self.n_data) < self.error_rate
-        self.errors[mask] ^= 1
+        mask = torch.rand(self.n_data, device=self.device) < self.error_rate
+        self.errors[mask] = 1 - self.errors[mask]
+
+
+    def _get_edge_information(self):
+        x_check_idx, q_idx_x = torch.where(self.H_x == 1)
+        z_check_idx, q_idx_z = torch.where(self.H_z == 1)
+
+        # Print per qubit index which checks it is connected to
+        for q in range(self.n_data):
+            x_checks = x_check_idx[q_idx_x == q].cpu().numpy()
+            z_checks = z_check_idx[q_idx_z == q].cpu().numpy()
+            print(f"Qubit {q} is connected to X checks {x_checks} and Z checks {z_checks}")
 
 
     def reset(self, seed=None, options=None):
-        self.errors = np.zeros(self.n_data, dtype=np.int8)
+        self.errors.zero_()
         self.episode_steps = 0
         self.previous_num_errors = 0
         self.previous_num_syndromes = 0
@@ -196,19 +203,7 @@ class QLDPCCode(gym.Env):
 
 
     def step(self, action):
-        self.errors[action] ^= 1
-
-        num_syndromes = self.syndrome.sum()
-        num_errors = self.errors.sum()
-        reward = self.get_reward(num_syndromes, num_errors)
-        self.previous_num_errors = num_errors
-        self.previous_num_syndromes = num_syndromes
-
-        self._flip_randomly()
-
-        self._update_graph()
-
-        return self.observation, reward, self.terminated, self.truncated, {}
+        raise NotImplementedError
 
 
     def render(self, mode="human"):
@@ -293,9 +288,135 @@ class QLDPCCode(gym.Env):
         # net.show("tanner_graph.html")
 
 
-if __name__ == "__main__":
-    code = QLDPCCode(l=3, m=3)
 
-    print(code.H_x)
-    print()
-    print(code.H_z)
+class QLDPCTrainEnv(QLDPCCode):
+
+    def __init__(self, l: int, m: int, **kwargs):
+        super().__init__(l, m, **kwargs)
+
+
+    # @property
+    # def terminated(self):
+    #     # Terminate the environment if there are no errors (successful decoding), or if any logical operator is triggered (logical failure).
+    #
+    #     if sum(self.errors) == 0:
+    #         return True
+    #
+    #     # When any logical operator is triggered, the episode terminates with a negative reward.
+    #     # Logical errors are detected by checking if all qubits in the given logical operator have errors.
+    #     # logical_x_ops = self.logical_x & self.errors
+    #     # # logical_z_ops = self.logical_z & self.errors
+    #     #
+    #     # for i in range(self.k):
+    #     #     # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
+    #     #     if torch.all(logical_x_ops[i] == self.logical_x[i]):
+    #     #         return True
+    #
+    #     return False
+
+
+    def step(self, action):
+        # Take a step without random flips afterwards.
+
+        self.errors[action] = 1 - self.errors[action]
+
+        num_syndromes = self.syndrome.sum()
+        num_errors = self.errors.sum()
+        reward = self.get_reward(num_syndromes, num_errors)
+        self.previous_num_errors = num_errors
+        self.previous_num_syndromes = num_syndromes
+
+        self._update_graph()
+
+        return self.observation, reward, self.terminated, self.truncated, {}
+
+
+    def get_reward(self, num_syndromes, num_errors):
+        # Reward the agent for surviving
+        delta_syndromes = self.previous_num_syndromes - num_syndromes
+        delta_errors = self.previous_num_errors - num_errors
+
+        r = -0.1 # Base reward for each step survived
+
+        r += 1.0 * delta_syndromes
+        r += 0.3 * delta_errors
+
+        if delta_errors > 0:
+            r += 0.5 * delta_errors
+
+        if self.terminated:
+            r += 30 if sum(self.errors) == 0 else -30
+
+        return float(r)
+
+
+
+class QLDPCEvalEnv(QLDPCCode):
+
+    def __init__(self, l: int, m: int, assert_env: bool = False, **kwargs):
+        super().__init__(l, m, **kwargs)
+
+        if assert_env:
+            self._assert_environment()
+
+
+    def _assert_environment(self):
+
+        # Check that the parity check matrices have the correct dimensions
+        assert self.H_x.shape == (self.n_stabilizers//2, self.n_data), f"H_x should have shape ({self.n_stabilizers//2}, {self.n_data}), got {self.H_x.shape}"
+        assert self.H_z.shape == (self.n_stabilizers//2, self.n_data), f"H_z should have shape ({self.n_stabilizers//2}, {self.n_data}), got {self.H_z.shape}"
+
+        # Sanity check dimensions
+        assert self.logical_z.shape[0] == self.logical_x.shape[0] == self.k, f"Number of logical operators should match k ({self.k}), got {self.logical_z.shape[0]} and {self.logical_x.shape[0]}"
+        assert self.logical_z.shape[1] == self.logical_x.shape[1] == self.n, f"Logical operators should have length n ({self.n}), got {self.logical_z.shape[1]} and {self.logical_x.shape[1]}"
+
+
+        # Perform an action, then check that the syndrome updates correctly and that the reward is calculated as expected.
+        # _, reward, _, _, _ = self.step(0)  # Flip the first qubit
+        # expected_syndrome = self.H_z[:, 0] % 2
+        # assert torch.all(self.syndrome == expected_syndrome), f"Syndrome did not update correctly after flipping the first qubit. Expected {expected_syndrome}, got {self.syndrome}"
+        # assert torch.all(self.data.x[self.x_idx, 3] == self.syndrome.float()), f"Graph node features did not update correctly after flipping the first qubit. Expected {self.syndrome.float()}, got {self.data.x[self.x_idx, 3]}"
+        #
+        # self.step(0)
+
+
+    @property
+    def terminated(self):
+        # Terminate the environment if any logical operator is triggered.
+
+        # When any logical operator is triggered, the episode terminates with a negative reward.
+        # Logical errors are detected by checking if all qubits in the given logical operator have errors.
+        # logical_x_ops = self.logical_x & self.errors
+        # # logical_z_ops = self.logical_z & self.errors
+        #
+        # for i in range(self.k):
+        #     # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
+        #     if torch.all(logical_x_ops[i] == self.logical_x[i]):
+        #         return True
+        #
+        # return False
+
+        return self.syndrome.sum() == 0
+
+
+    def step(self, action):
+        self.errors[action] = 1 - self.errors[action]
+
+        num_syndromes = self.syndrome.sum()
+        num_errors = self.errors.sum()
+        reward = self.get_reward(num_syndromes, num_errors)
+        self.previous_num_errors = num_errors
+        self.previous_num_syndromes = num_syndromes
+
+        self._flip_randomly()
+
+        self._update_graph()
+
+        return self.observation, reward, self.terminated, self.truncated, {}
+
+
+    def get_reward(self, num_syndromes, num_errors):
+        # Reward for each step survived, ignoring the actual number of syndromes/errors.
+        # This allows us to measure episode length until failure without biasing towards specific error/syndrome counts.
+
+        return 1.0

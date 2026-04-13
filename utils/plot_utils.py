@@ -2,12 +2,12 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 import numpy as np
 
-def plot_results(results, baselines, config, title="results/results.png"):
+def plot_results(results, baselines, config, window=100, title="results/results.png"):
 
     plt.figure(figsize=(12, 6))
     for name, runs in results.items():
 
-        mean, ci95 = get_confidence_bounds(runs)
+        mean, ci95 = get_confidence_bounds(runs, window)
 
         x_len = len(mean)
         progress = np.linspace(0, config["num_timesteps"], x_len)
@@ -34,7 +34,8 @@ def smooth(y, window, poly=1):
     '''
     y: vector to be smoothed
     window: size of the smoothing window '''
-    return savgol_filter(y,window,poly)
+
+    return savgol_filter(y,window,poly) if window > 0 else y
 
 
 def get_confidence_bounds(results, window=100):

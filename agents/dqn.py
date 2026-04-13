@@ -117,5 +117,4 @@ class DQNAgent:
             self.target_model.load_state_dict(self.model.state_dict())
 
         self.steps += 1
-
         return loss.item()
