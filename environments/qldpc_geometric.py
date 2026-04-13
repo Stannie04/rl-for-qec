@@ -2,8 +2,11 @@ import gymnasium as gym
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-from torch_geometric.data import Data
+from torch_geometric.data import Data, HeteroData
 import torch
+
+# from scipy.linalg import null_space, svd
+import galois
 
 class QLDPCCode(gym.Env):
 
@@ -11,6 +14,8 @@ class QLDPCCode(gym.Env):
 
         super().__init__()
         self.device = kwargs.get("device", "cpu")
+
+        self.n, self.k, self.d = kwargs.get("n"), kwargs.get("k"), kwargs.get("d")
 
         self.l, self.m = l, m
         self.n_data, self.n_stabilizers = 2*l*m, 2*l*m
@@ -21,16 +26,65 @@ class QLDPCCode(gym.Env):
 
         self.graph, self.data, self.node_to_index = self._init_graph()
 
+        self.q_idx = torch.tensor([self.node_to_index[f"q{q}"] for q in range(self.n_data)], dtype=torch.long, device=self.device)
+        self.x_idx = torch.tensor([self.node_to_index[f"x{i}"] for i in range(self.H_x.shape[0])], dtype=torch.long, device=self.device)
+        self.z_idx = torch.tensor([self.node_to_index[f"z{i}"] for i in range(self.H_z.shape[0])], dtype=torch.long, device=self.device)
+        self.errors = torch.zeros(self.n_data, dtype=torch.int32, device=self.device)
+
+        self.logical_operators = self._get_logical_operators()
+
         self.action_space = gym.spaces.Discrete(self.n_data)
-        self.errors = np.zeros(self.n_data, dtype=np.int8)
 
         self.episode_steps = 0
         self.max_episode_length = kwargs.get("max_episode_length", 100)
         self.termination_threshold = kwargs.get("termination_threshold", 10)
-        self.logical_operators = kwargs.get("logical_operators", [])
 
         self.previous_num_errors = 0
         self.previous_num_syndromes = 0
+
+
+    def _get_logical_operators(self):
+        # The logical operators can be derived from parity check matrices as
+        # a basis for the kernel of H_x and H_z.
+
+        GF2 = galois.GF(2)
+
+        def quotient_basis(null_space, row_space):
+            """
+            Return a basis for null_space modulo row_space.
+            Keeps nullspace vectors that are independent from the stabilizers.
+            """
+            GF2 = galois.GF(2)
+            null_space = GF2(np.atleast_2d(np.array(null_space, dtype=int)))
+            row_space = GF2(np.atleast_2d(np.array(row_space, dtype=int)))
+
+            if row_space.size == 0:
+                return null_space
+
+            current = row_space.copy()
+            current_rank = current.row_space().shape[0] if current.ndim == 2 else 0
+            logicals = []
+
+            for v in null_space:
+                candidate = np.vstack([current, v])
+                new_rank = GF2(candidate).row_space().shape[0]
+                if new_rank > current_rank:
+                    logicals.append(v)
+                    current = candidate
+                    current_rank = new_rank
+
+            if len(logicals) == 0:
+                return GF2.Zeros((0, null_space.shape[1]))
+
+            return GF2(np.vstack(logicals))
+
+        H_x_gf2 = GF2(self.H_x.cpu().numpy())
+        H_z_gf2 = GF2(self.H_z.cpu().numpy())
+
+        # logical Z = ker(H_x) / row(H_z)
+        # logical X = ker(H_z) / row(H_x)
+        self.logical_z = torch.tensor(quotient_basis(H_x_gf2.null_space(), H_z_gf2.row_space()), dtype=torch.int32, device=self.device)
+        self.logical_x = torch.tensor(quotient_basis(H_z_gf2.null_space(), H_x_gf2.row_space()), dtype=torch.int32, device=self.device)
 
 
     @property
