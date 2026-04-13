@@ -213,6 +213,10 @@ class QLDPCCode(gym.Env):
 
     def render(self, mode="human"):
 
+        if mode == "edge_info":
+            self._get_edge_information()
+            return
+
         pos = nx.multipartite_layout(self.graph, subset_key="layer")
 
         # Separate node lists
@@ -224,11 +228,37 @@ class QLDPCCode(gym.Env):
         x_check_colors = ["red" if self.data.x[self.node_to_index[n], 3] == 1 else "lightcoral" for n in x_checks]
         z_check_colors = ["blue" if self.data.x[self.node_to_index[n], 3] == 1 else "lightblue" for n in z_checks]
 
+        # Color edges based on whether they are connected to an error qubit or not
+        error_edges = []
+        normal_edges = []
+
+        for u, v in self.graph.edges:
+            # Check if either endpoint is a qubit with error
+            def is_error_qubit(node):
+                return (
+                        self.graph.nodes[node]["node_type"] == "qubit" and
+                        self.errors[int(node[1:])] == 1
+                )
+
+            if is_error_qubit(u) or is_error_qubit(v):
+                error_edges.append((u, v))
+            else:
+                normal_edges.append((u, v))
+
 
         plt.figure(figsize=(10, 8))
 
         # Draw edges
-        nx.draw_networkx_edges(self.graph, pos, alpha=0.3)
+        # Draw normal edges
+        nx.draw_networkx_edges(self.graph, pos,
+                               edgelist=normal_edges,
+                               alpha=0.3)
+
+        # Draw error edges (highlighted)
+        nx.draw_networkx_edges(self.graph, pos,
+                               edgelist=error_edges,
+                               edge_color="red",
+                               width=2.0)
 
         # Draw nodes by type (different shapes & colors)
         nx.draw_networkx_nodes(self.graph, pos,
