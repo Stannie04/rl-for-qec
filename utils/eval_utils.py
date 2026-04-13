@@ -58,32 +58,6 @@ def run_baselines(
         return {name: total_rewards}
 
 
-def benchmark_jax_env(code_config, device="cpu"):
-
-    sample_config = code_config.copy()
-
-    start = time.time()
-    env = JaxQLDPCCode(**sample_config, device=device)
-    end = time.time()
-    print(f"Initialization took {end - start:.5f} seconds")
-
-    key = jax.random.PRNGKey(0)
-    obs, key = env.reset(key)
-
-    step_times = []
-    for _ in tqdm(range(1000), desc="Benchmarking JAX environment"):
-
-        start = time.time()
-        obs, key = env.step(obs, key)
-        end = time.time()
-        step_times.append(end - start)
-
-    t = PrettyTable(["Component", "Avg Time (s)", "it/s"])
-    t.add_row(["Environment Step", f"{np.mean(step_times[1:]):.5f}", f"{1/np.mean(step_times[1:]):.2f}"])
-    print(t)
-
-
-
 def benchmark_env(code_config, model_config, device="cpu"):
 
     sample_config = code_config.copy()
