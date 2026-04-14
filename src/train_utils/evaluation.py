@@ -9,6 +9,11 @@ from src.environments import QLDPCTrainEnv, QLDPCEvalEnv
 from src.read_config import ConfigParser
 
 
+def render_example_environment(config):
+    env = QLDPCEvalEnv(config)
+    env.render()
+
+
 def render_evaluation_episode(config, model_checkpoint, max_episode_steps=100):
 
     model = SAC.load(model_checkpoint, device="cuda")
