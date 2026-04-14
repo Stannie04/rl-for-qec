@@ -1,11 +1,12 @@
+from src.agents import RandomAgent, SilentAgent, DQNAgent
+from src.environments import QLDPCTrainEnv, QLDPCEvalEnv
+
+from src.experiments.read_config import ConfigParser
 from stable_baselines3 import SAC
-from environments import QLDPCTrainEnv, QLDPCEvalEnv
-from agents import SilentAgent, DQNAgent
 from tqdm import tqdm
 import numpy as np
 import time
 
-import jax
 from prettytable import PrettyTable
 
 
@@ -32,14 +33,14 @@ def render_evaluation_episode(code_config, model_checkpoint, max_episode_steps=1
     print("Episode finished without termination or truncation.")
 
 
-def run_baselines(
-    model_config,
-    code_config):
+def run_baselines(config):
 
-    silent_agent = SilentAgent(**model_config)
+    silent_agent = SilentAgent(config)
+    random_agent = RandomAgent(config)
 
-    for agent, name in [(silent_agent, "Silent Agent")]:
-        env = QLDPCEvalEnv(**code_config, evaluation_mode=True)
+    results = {}
+    for agent, name in [(silent_agent, "Silent Agent"), (random_agent, "Random Agent")]:
+        env = QLDPCEvalEnv(config, evaluation_mode=True)
 
         total_rewards = []
         for i in tqdm(range(10_000), desc=f"Evaluating {name}"):
@@ -55,18 +56,17 @@ def run_baselines(
 
             total_rewards.append(total_reward)
 
+        np.save(f"results/{name.lower().replace(' ', '_')}_rewards.npy", np.array(total_rewards))
         return {name: total_rewards}
 
 
-def benchmark_env(code_config, model_config, device="cpu"):
-
-    sample_config = code_config.copy()
+def benchmark_env(config):
 
     start = time.time()
-    env = QLDPCEvalEnv(**sample_config, device=device, assert_env=True)
+    env = QLDPCEvalEnv(config, assert_env=True)
     env.render(mode="edge_info")
 
-    agent = DQNAgent(env, **model_config["params"], device=device)
+    agent = DQNAgent(env, config)
     end = time.time()
     print(f"Initialization took {end - start:.5f} seconds")
 
@@ -114,20 +114,23 @@ def benchmark_env(code_config, model_config, device="cpu"):
     print(t)
 
 
-def evaluate_agent(code_config, model_params, device, state_dict):
-    env = QLDPCEvalEnv(**code_config, device=device)
-    agent = DQNAgent(env, device=device, evaluation_mode=True, **model_params)
+def evaluate_agent(config: ConfigParser, state_dict: dict):
+    env = QLDPCEvalEnv(config)
+    agent = DQNAgent(env, config, evaluation_mode=True)
     agent.model.load_state_dict(state_dict)
 
-    obs, info = env.reset()
-    done = False
+    lengths = []
+    for _ in range (config.num_eval_episodes):
+        obs, info = env.reset()
+        done = False
 
-    episode_length = 0
-    while not done:
-        action = agent.select_action(obs)
-        obs, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
-        episode_length += 1
+        episode_length = 0
+        while not done:
+            action = agent.select_action(obs)
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+            episode_length += 1
 
+        lengths.append(episode_length)
 
-    return episode_length
+    return np.mean(lengths)

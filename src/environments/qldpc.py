@@ -5,24 +5,25 @@ import matplotlib.pyplot as plt
 from torch_geometric.data import Data, HeteroData
 import torch
 
+from src.experiments.read_config import ConfigParser
+
 # from scipy.linalg import null_space, svd
 import galois
 
 class QLDPCCode(gym.Env):
 
-    def __init__(self, l: int, m: int, **kwargs):
-
+    def __init__(self, config: ConfigParser):
         super().__init__()
-        self.device = kwargs.get("device", "cpu")
+        self.device = config.device
 
-        self.n, self.k, self.d = kwargs.get("n"), kwargs.get("k"), kwargs.get("d")
+        self.n, self.k, self.d = config.n, config.k, config.d
 
-        self.l, self.m = l, m
-        self.n_data, self.n_stabilizers = 2*l*m, 2*l*m
+        self.l, self.m = config.l, config.m
+        self.n_data, self.n_stabilizers = 2*self.l*self.m, 2*self.l*self.m
 
-        self.error_rate = kwargs.get("error_rate", 0.05)
+        self.error_rate = config.error_rate
 
-        self.H_x, self.H_z = self._init_parity_check_matrices(kwargs.get("params"))
+        self.H_x, self.H_z = self._init_parity_check_matrices(config.code_params)
 
         self.graph, self.data, self.node_to_index = self._init_graph()
 
@@ -36,8 +37,7 @@ class QLDPCCode(gym.Env):
         self.action_space = gym.spaces.Discrete(self.n_data)
 
         self.episode_steps = 0
-        self.max_episode_length = kwargs.get("max_episode_length", 100)
-        self.termination_threshold = kwargs.get("termination_threshold", 10)
+        self.max_episode_length = config.max_episode_length
 
         self.previous_num_errors = 0
         self.previous_num_syndromes = 0
@@ -330,8 +330,8 @@ class QLDPCCode(gym.Env):
 
 class QLDPCTrainEnv(QLDPCCode):
 
-    def __init__(self, l: int, m: int, **kwargs):
-        super().__init__(l, m, **kwargs)
+    def __init__(self, config: ConfigParser):
+        super().__init__(config)
 
 
     # @property
@@ -392,8 +392,8 @@ class QLDPCTrainEnv(QLDPCCode):
 
 class QLDPCEvalEnv(QLDPCCode):
 
-    def __init__(self, l: int, m: int, assert_env: bool = False, **kwargs):
-        super().__init__(l, m, **kwargs)
+    def __init__(self, config: ConfigParser, assert_env: bool=False):
+        super().__init__(config)
 
         if assert_env:
             self._assert_environment()

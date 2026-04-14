@@ -1,0 +1,19 @@
+dqn:
+  batch_size: 128
+  gamma: 0.99
+  epsilon_start: 1.0
+  epsilon_end: 0.01
+  epsilon_decay: 50000
+  target_update_freq: 100
+  learning_rate: 0.001
+  replay_buffer_capacity: 100000
+
+sac:
+  batch_size: 256
+  learning_rate: 0.0003388479408979718
+  buffer_size: 500000
+  gamma: 0.9893849237816411
+  tau: 0.018768131988037548
+  train_freq: 8
+  gradient_steps: 1
+  ent_coef: 0.01651545290854241

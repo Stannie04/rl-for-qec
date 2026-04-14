@@ -1,45 +1,52 @@
-from utils import *
-import sys
-import json
-from tqdm import tqdm
-import numpy as np
-
-import matplotlib.pyplot as plt
-
-import torch
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+from src.experiments import *
+import argparse
 
 
-def get_configs(model_config_file, code_config_file, agent_name, code_name):
-    model_config = json.load(open(model_config_file))
-    code_config = json.load(open(code_config_file))
-    return model_config[agent_name], code_config[code_name]
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train RL agents for quantum error correction.")
+    parser.add_argument("--agent", type=str, default="dqn", help="Agent type (e.g., dqn, ppo)")
+    parser.add_argument("--code", type=str, default="18_2_3_toric", help="Code configuration (e.g., 18_2_3_toric)")
+    parser.add_argument("--experiment", type=str, default="benchmark", help="Experiment type (e.g., train, eval, benchmark)")
+    return parser.parse_args()
+
+
+def select_experiment(experiment_name):
+    match experiment_name:
+        case "train": return train_dqn
+        case "baselines": return run_baselines
+        case "benchmark": return benchmark_env
+        case _: raise ValueError(f"Unknown experiment: {experiment_name}")
+
+
 
 if __name__ == '__main__':
 
-    agent_name = sys.argv[1] if len(sys.argv) > 1 else "dqn"
-    code_name = sys.argv[2] if len(sys.argv) > 2 else "18_2_3_toric"
+    args = parse_args()
 
-    model_config, code_config = get_configs("model_configs.json", "code_configs.json", agent_name, code_name)
+    config = ConfigParser("configs", args.agent, args.code)
+    experiment = select_experiment(args.experiment)
+
+    experiment(config)
 
     # optimize_hyperparameters(code_config)
 
-    ldpc = np.load("results/new_results/dqn_lengths_ldpc.npy")
-    toric = np.load("results/new_results/dqn_lengths_toric.npy")
-    baseline = np.load("results/new_results/silent_agent_rewards.npy")
+    # ldpc = np.load("results/new_results/dqn_lengths_ldpc.npy")
+    # toric = np.load("results/new_results/dqn_lengths_toric.npy")
+    # baseline = np.load("results/new_results/silent_agent_rewards.npy")
+    # random = np.load("results/new_results/random_agent_rewards.npy")
 
-    results = {}
-    baseline = {"Silent Agent": baseline.flatten()}
+    # results = {}
+    # baseline = {"Silent Agent": baseline.flatten(), "Random Agent": random.flatten()}
 
-    for lengths, name in [(ldpc, "LDPC"), (toric, "Toric")]:
-        results[name] = [lengths.flatten()]
 
-        #
-        # print(f"{name} - Mean: {lengths.mean():.2f}, Std: {lengths.std():.2f}, Max: {lengths.max()}, Min: {lengths.min()}")
-        # plt.plot(lengths, label=name)
+    # for lengths, name in [(ldpc, "LDPC"), (toric, "Toric")]:
+    #     results[name] = [lengths.flatten()]
 
-    plot_results(results, baseline, model_config, 0, f"results/simplified_train_env.png")
+
+    #     print(f"{name} - Mean: {lengths.mean():.2f}, Std: {lengths.std():.2f}, Max: {lengths.max()}, Min: {lengths.min()}")
+    #     plt.plot(lengths, label=name)
+
+    # plot_results(results, baseline, model_config, 0, f"results/simplified_train_env2.png")
 
         # plot_results({"Reward": lengths}, {}, model_config, f"results/{name}_lengths.png")
 
@@ -48,7 +55,7 @@ if __name__ == '__main__':
 
     # rewards = adversarial_training_loop(model_config=model_config, code_config=code_config)
     #rewards = train_dqn(code_config=code_config, model_config=model_config, device=device)
-    #baselines = run_baselines(model_config=model_config, code_config=code_config)
+    # baselines = run_baselines(model_config=model_config, code_config=code_config)
 
     #rewards.pop("Reward")
     #plot_results(rewards, baselines, model_config, f"results/termination.png")

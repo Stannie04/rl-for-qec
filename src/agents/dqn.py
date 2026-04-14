@@ -2,10 +2,13 @@ from collections import deque
 import random
 import copy
 import numpy as np
+from src.experiments.read_config import ConfigParser
+from src.environments.qldpc import QLDPCCode
 import torch
 from .gnn import GNN
 from torch_geometric.data import Batch, Data
 import torch.nn.functional as F
+
 
 torch.set_float32_matmul_precision('high')
 
@@ -39,18 +42,17 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, env, **kwargs):
-        self.batch_size = kwargs.get("batch_size", 64)
-        self.gamma = kwargs.get("gamma", 0.99)
-        self.epsilon_start = kwargs.get("epsilon_start", 1.0)
-        self.epsilon_end = kwargs.get("epsilon_end", 0.01)
-        self.epsilon_decay = kwargs.get("epsilon_decay", 500)
-        self.device = kwargs.get("device", torch.device("cpu"))
-        self.target_update_freq = kwargs.get("target_update_freq", 100)
-        self.num_timesteps = kwargs.get("num_timesteps", 100000)
+    def __init__(self, env: QLDPCCode, config: ConfigParser, evaluation_mode: bool=False):
+        self.batch_size = config.batch_size
+        self.gamma = config.gamma
+        self.epsilon_start = config.epsilon_start
+        self.epsilon_end = config.epsilon_end
+        self.epsilon_decay = config.epsilon_decay
+        self.device = config.device
+        self.target_update_freq = config.target_update_freq
 
         self.env = env
-        self.replay_buffer = ReplayBuffer(capacity=kwargs.get("replay_buffer_capacity", 10000), device=self.device)
+        self.replay_buffer = ReplayBuffer(capacity=config.replay_buffer_capacity, device=self.device)
 
         self.model = GNN().to(self.device)
         self.target_model = copy.deepcopy(self.model)
@@ -59,10 +61,9 @@ class DQNAgent:
         self.target_model = torch.compile(self.target_model, mode="reduce-overhead")
         # self.train_step = torch.compile(self.train_step)
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=kwargs.get("learning_rate", 1e-3))
-        self.eval_freq = kwargs.get("eval_freq", 10000)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.learning_rate)
 
-        self.evaluation_mode = kwargs.get("evaluation_mode", False)
+        self.evaluation_mode = evaluation_mode
 
         self.steps = 0
         self.num_nodes = self.env.data.num_nodes

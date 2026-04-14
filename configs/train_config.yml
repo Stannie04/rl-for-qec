@@ -1,0 +1,4 @@
+n_repetitions: 1
+num_timesteps: 100000
+num_eval_episodes: 10
+wandb_project: "rl-for-qec"
