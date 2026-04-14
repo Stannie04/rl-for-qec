@@ -17,8 +17,7 @@ def single_agent_training_loop(env, agent, config):
     episode_reward = 0
     obs, info = env.reset()
 
-    pbar = tqdm(range(config.num_timesteps), desc="Training DQN Agent")
-    for step in pbar:
+    for step in range(config.num_timesteps):
 
         action = agent.select_action(obs)
 
@@ -28,6 +27,8 @@ def single_agent_training_loop(env, agent, config):
         obs = next_obs
 
         agent.train_step()
+
+        episode_reward += reward
 
         wandb.log({"timestep": step, "reward": reward}, step=step)
         wandb.log({k: v for k, v in info.items() if k != "episode_steps"}, step=step)
@@ -45,7 +46,6 @@ def single_agent_training_loop(env, agent, config):
         if step % config.steps_between_evaluation == 0:
             state_dict = agent.model.state_dict()
             episode_length = evaluate_agent(config, state_dict)
-            pbar.set_description(f"Step {step} - Eval Episode Length: {episode_length}")
             lengths.append([episode_length])
 
             wandb.log({"eval_episode_length": episode_length}, step=step)
@@ -57,7 +57,7 @@ def train_dqn(config) -> dict:
     all_rewards = []
     all_lengths = []
 
-    wandb.init(project=config.wandb_project, tags=f"{config.agent_name}_{config.code_name}", config=config.__dict__)
+    wandb.init(project=config.wandb_project, tags=[f"{config.agent_name}_{config.code_name}"], config=config.__dict__, dir="/tmp/wandb")
 
     env = QLDPCTrainEnv(config)
     agent = DQNAgent(env, config)

@@ -32,7 +32,7 @@ class QLDPCCode(gym.Env):
         self.z_idx = torch.tensor([self.node_to_index[f"z{i}"] for i in range(self.H_z.shape[0])], dtype=torch.long, device=self.device)
         self.errors = torch.zeros(self.n_data, dtype=torch.int32, device=self.device)
 
-        self.logical_operators = self._get_logical_operators()
+        self.logical_x, self.logical_z = self._get_logical_operators()
 
         self.action_space = gym.spaces.Discrete(self.n_data)
 
@@ -83,9 +83,10 @@ class QLDPCCode(gym.Env):
 
         # logical Z = ker(H_x) / row(H_z)
         # logical X = ker(H_z) / row(H_x)
-        self.logical_z = torch.tensor(quotient_basis(H_x_gf2.null_space(), H_z_gf2.row_space()), dtype=torch.int32, device=self.device)
-        self.logical_x = torch.tensor(quotient_basis(H_z_gf2.null_space(), H_x_gf2.row_space()), dtype=torch.int32, device=self.device)
+        logical_z = torch.tensor(quotient_basis(H_x_gf2.null_space(), H_z_gf2.row_space()), dtype=torch.int32, device=self.device)
+        logical_x = torch.tensor(quotient_basis(H_z_gf2.null_space(), H_x_gf2.row_space()), dtype=torch.int32, device=self.device)
 
+        return logical_x, logical_z
 
     @property
     def syndrome(self):
@@ -342,24 +343,24 @@ class QLDPCTrainEnv(QLDPCCode):
         super().__init__(config)
 
 
-    @property
-    def terminated(self):
-        # Terminate the environment if there are no errors (successful decoding), or if any logical operator is triggered (logical failure).
-
-        if sum(self.errors) == 0:
-            return True
-
-        # When any logical operator is triggered, the episode terminates with a negative reward.
-        # Logical errors are detected by checking if all qubits in the given logical operator have errors.
-        logical_x_ops = self.logical_x & self.errors
-        # logical_z_ops = self.logical_z & self.errors
-
-        for i in range(self.k):
-            # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
-            if torch.all(logical_x_ops[i] == self.logical_x[i]):
-                return True
-
-        return False
+    # @property
+    # def terminated(self):
+    #     # Terminate the environment if there are no errors (successful decoding), or if any logical operator is triggered (logical failure).
+    #
+    #     if sum(self.errors) == 0:
+    #         return True
+    #
+    #     # When any logical operator is triggered, the episode terminates with a negative reward.
+    #     # Logical errors are detected by checking if all qubits in the given logical operator have errors.
+    #     logical_x_ops = self.logical_x & self.errors
+    #     # logical_z_ops = self.logical_z & self.errors
+    #
+    #     for i in range(self.k):
+    #         # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
+    #         if torch.all(logical_x_ops[i] == self.logical_x[i]):
+    #             return True
+    #
+    #     return False
 
 
     def step(self, action):
@@ -435,17 +436,17 @@ class QLDPCEvalEnv(QLDPCCode):
 
         # When any logical operator is triggered, the episode terminates with a negative reward.
         # Logical errors are detected by checking if all qubits in the given logical operator have errors.
-        logical_x_ops = self.logical_x & self.errors
-        # logical_z_ops = self.logical_z & self.errors
+        # logical_x_ops = self.logical_x & self.errors
+        # # logical_z_ops = self.logical_z & self.errors
+        #
+        # for i in range(self.k):
+        #     # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
+        #     if torch.all(logical_x_ops[i] == self.logical_x[i]):
+        #         return True
+        #
+        # return False
 
-        for i in range(self.k):
-            # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
-            if torch.all(logical_x_ops[i] == self.logical_x[i]):
-                return True
-
-        return False
-
-        # return self.syndrome.sum() == 0
+        return self.syndrome.sum() == 0
 
 
     @property
