@@ -1,20 +1,19 @@
-from src.agents import RandomAgent, SilentAgent, DQNAgent
-from src.environments import QLDPCTrainEnv, QLDPCEvalEnv
-
-from src.experiments.read_config import ConfigParser
-from stable_baselines3 import SAC
-from tqdm import tqdm
-import numpy as np
 import time
-
+import numpy as np
+from tqdm import tqdm
+from stable_baselines3 import SAC
 from prettytable import PrettyTable
 
+from src.agents import RandomAgent, SilentAgent, DQNAgent
+from src.environments import QLDPCTrainEnv, QLDPCEvalEnv
+from src.read_config import ConfigParser
 
-def render_evaluation_episode(code_config, model_checkpoint, max_episode_steps=100):
+
+def render_evaluation_episode(config, model_checkpoint, max_episode_steps=100):
 
     model = SAC.load(model_checkpoint, device="cuda")
 
-    env = QLDPCTrainEnv(**code_config, evaluation_mode=True)
+    env = QLDPCTrainEnv(config)
 
     obs, info = env.reset()
     env.render()
@@ -40,7 +39,7 @@ def run_baselines(config):
 
     results = {}
     for agent, name in [(silent_agent, "Silent Agent"), (random_agent, "Random Agent")]:
-        env = QLDPCEvalEnv(config, evaluation_mode=True)
+        env = QLDPCEvalEnv(config)
 
         total_rewards = []
         for i in tqdm(range(10_000), desc=f"Evaluating {name}"):
@@ -56,8 +55,9 @@ def run_baselines(config):
 
             total_rewards.append(total_reward)
 
-        np.save(f"results/{name.lower().replace(' ', '_')}_rewards.npy", np.array(total_rewards))
-        return {name: total_rewards}
+        results[name] = total_rewards
+
+    return results
 
 
 def benchmark_env(config):
@@ -120,7 +120,7 @@ def evaluate_agent(config: ConfigParser, state_dict: dict):
     agent.model.load_state_dict(state_dict)
 
     lengths = []
-    for _ in range (config.num_eval_episodes):
+    for _ in tqdm(range(config.num_eval_episodes), desc="Evaluating Agent", leave=False):
         obs, info = env.reset()
         done = False
 

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from torch_geometric.data import Data, HeteroData
 import torch
 
-from src.experiments.read_config import ConfigParser
+from src.read_config import ConfigParser
 
 # from scipy.linalg import null_space, svd
 import galois
@@ -112,6 +112,14 @@ class QLDPCCode(gym.Env):
     @property
     def truncated(self):
         return self.episode_steps >= self.max_episode_length
+
+
+    def _get_info(self):
+        return{
+            "num_errors": self.errors.sum().item(),
+            "num_syndromes": self.syndrome.sum().item(),
+            "episode_steps": self.episode_steps
+        }
 
 
     def _init_parity_check_matrices(self, params):
@@ -238,7 +246,7 @@ class QLDPCCode(gym.Env):
 
         self._update_graph()
 
-        return self.observation, {}
+        return self.observation, self._get_info()
 
 
     def step(self, action):
@@ -334,28 +342,30 @@ class QLDPCTrainEnv(QLDPCCode):
         super().__init__(config)
 
 
-    # @property
-    # def terminated(self):
-    #     # Terminate the environment if there are no errors (successful decoding), or if any logical operator is triggered (logical failure).
-    #
-    #     if sum(self.errors) == 0:
-    #         return True
-    #
-    #     # When any logical operator is triggered, the episode terminates with a negative reward.
-    #     # Logical errors are detected by checking if all qubits in the given logical operator have errors.
-    #     # logical_x_ops = self.logical_x & self.errors
-    #     # # logical_z_ops = self.logical_z & self.errors
-    #     #
-    #     # for i in range(self.k):
-    #     #     # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
-    #     #     if torch.all(logical_x_ops[i] == self.logical_x[i]):
-    #     #         return True
-    #
-    #     return False
+    @property
+    def terminated(self):
+        # Terminate the environment if there are no errors (successful decoding), or if any logical operator is triggered (logical failure).
+
+        if sum(self.errors) == 0:
+            return True
+
+        # When any logical operator is triggered, the episode terminates with a negative reward.
+        # Logical errors are detected by checking if all qubits in the given logical operator have errors.
+        logical_x_ops = self.logical_x & self.errors
+        # logical_z_ops = self.logical_z & self.errors
+
+        for i in range(self.k):
+            # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
+            if torch.all(logical_x_ops[i] == self.logical_x[i]):
+                return True
+
+        return False
 
 
     def step(self, action):
         # Take a step without random flips afterwards.
+
+        self.episode_steps += 1
 
         self.errors[action] = 1 - self.errors[action]
 
@@ -367,7 +377,7 @@ class QLDPCTrainEnv(QLDPCCode):
 
         self._update_graph()
 
-        return self.observation, reward, self.terminated, self.truncated, {}
+        return self.observation, reward, self.terminated, self.truncated, self._get_info()
 
 
     def get_reward(self, num_syndromes, num_errors):
@@ -425,20 +435,30 @@ class QLDPCEvalEnv(QLDPCCode):
 
         # When any logical operator is triggered, the episode terminates with a negative reward.
         # Logical errors are detected by checking if all qubits in the given logical operator have errors.
-        # logical_x_ops = self.logical_x & self.errors
-        # # logical_z_ops = self.logical_z & self.errors
-        #
-        # for i in range(self.k):
-        #     # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
-        #     if torch.all(logical_x_ops[i] == self.logical_x[i]):
-        #         return True
-        #
-        # return False
+        logical_x_ops = self.logical_x & self.errors
+        # logical_z_ops = self.logical_z & self.errors
 
-        return self.syndrome.sum() == 0
+        for i in range(self.k):
+            # if torch.all(logical_x_ops[i] == self.logical_x[i]) or torch.all(logical_z_ops[i] == self.logical_z[i]):
+            if torch.all(logical_x_ops[i] == self.logical_x[i]):
+                return True
+
+        return False
+
+        # return self.syndrome.sum() == 0
+
+
+    @property
+    def truncated(self):
+        # For evaluation, we do not limit the length of the episode.
+
+        return False
 
 
     def step(self, action):
+
+        self.episode_steps += 1
+
         self.errors[action] = 1 - self.errors[action]
 
         num_syndromes = self.syndrome.sum()
@@ -451,7 +471,7 @@ class QLDPCEvalEnv(QLDPCCode):
 
         self._update_graph()
 
-        return self.observation, reward, self.terminated, self.truncated, {}
+        return self.observation, reward, self.terminated, self.truncated, self._get_info()
 
 
     def get_reward(self, num_syndromes, num_errors):

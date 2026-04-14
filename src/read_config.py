@@ -1,5 +1,6 @@
 import yaml
 import torch
+import prettytable
 
 class ConfigParser:
     def __init__(self, config_dir, agent_name, code_name):
@@ -20,6 +21,19 @@ class ConfigParser:
             for key, value in c.items():
                 setattr(self, key, value)
 
-
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Using device: {self.device}")
+
+        self.agent_name = agent_name
+        self.code_name = code_name
+
+        self._print_configuration()
+
+
+    def _print_configuration(self):
+        table = prettytable.PrettyTable()
+        table.field_names = ["Parameter", "Value"]
+
+        for key, value in self.__dict__.items():
+            table.add_row([key, value])
+
+        print(table)

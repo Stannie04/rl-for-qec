@@ -2,13 +2,13 @@ from collections import deque
 import random
 import copy
 import numpy as np
-from src.experiments.read_config import ConfigParser
-from src.environments.qldpc import QLDPCCode
 import torch
 from .gnn import GNN
 from torch_geometric.data import Batch, Data
 import torch.nn.functional as F
 
+from src.environments import QLDPCCode
+from src.read_config import ConfigParser
 
 torch.set_float32_matmul_precision('high')
 
@@ -59,7 +59,6 @@ class DQNAgent:
 
         self.model = torch.compile(self.model, mode="reduce-overhead")
         self.target_model = torch.compile(self.target_model, mode="reduce-overhead")
-        # self.train_step = torch.compile(self.train_step)
 
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.learning_rate)
 

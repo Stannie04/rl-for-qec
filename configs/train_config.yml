@@ -1,4 +1,7 @@
 n_repetitions: 1
 num_timesteps: 100000
+steps_between_evaluation: 10000
 num_eval_episodes: 10
+
+# Logging parameters for Weights & Biases
 wandb_project: "rl-for-qec"
