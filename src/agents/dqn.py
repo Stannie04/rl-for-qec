@@ -10,6 +10,8 @@ import torch.nn.functional as F
 from src.environments import QLDPCCode
 from src.read_config import ConfigParser
 
+import torch._dynamo
+torch._dynamo.config.capture_scalar_outputs = True
 torch.set_float32_matmul_precision('high')
 
 class ReplayBuffer:
@@ -54,11 +56,11 @@ class DQNAgent:
         self.env = env
         self.replay_buffer = ReplayBuffer(capacity=config.replay_buffer_capacity, device=self.device)
 
-        self.model = GNN().to(self.device)
+        self.model = GNN(num_classes=env.n_data).to(self.device)
         self.target_model = copy.deepcopy(self.model)
 
-        self.model = torch.compile(self.model, mode="reduce-overhead")
-        self.target_model = torch.compile(self.target_model, mode="reduce-overhead")
+        # self.model = torch.compile(self.model, mode="reduce-overhead")
+        # self.target_model = torch.compile(self.target_model, mode="reduce-overhead")
 
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.learning_rate)
 
@@ -74,7 +76,7 @@ class DQNAgent:
             return self.env.action_space.sample()
 
         with torch.no_grad():
-            q_values = self.model(state.x, state.edge_index)[:self.env.action_space.n]
+            q_values = self.model(state.x, state.edge_index, state.batch, state.edge_attr)
             return q_values.argmax().item()
 
 
@@ -84,23 +86,14 @@ class DQNAgent:
 
         state_batch, actions, rewards, next_state_batch, dones = self.replay_buffer.sample(self.batch_size)
 
-        q_all = self.model(state_batch.x, state_batch.edge_index)
-        q_all = q_all.view(self.batch_size, self.num_nodes, -1)
-        q_all = q_all[:, :self.env.n_data, 0]
-
+        q_all = self.model(state_batch.x, state_batch.edge_index, state_batch.batch, state_batch.edge_attr)
         q = q_all.gather(1, actions.unsqueeze(1)).squeeze(1)
         with torch.no_grad():
 
-            next_q_online = self.model(next_state_batch.x, next_state_batch.edge_index)
-            next_q_online = next_q_online.reshape(self.batch_size, self.num_nodes)
-            next_q_online = next_q_online[:, :self.env.n_data]
-
+            next_q_online = self.model(next_state_batch.x, next_state_batch.edge_index, next_state_batch.batch, next_state_batch.edge_attr)
             next_actions = next_q_online.argmax(dim=1)
 
-            next_q_target = self.target_model(next_state_batch.x, next_state_batch.edge_index)
-            next_q_target = next_q_target.reshape(self.batch_size, self.num_nodes)
-            next_q_target = next_q_target[:, :self.env.n_data]
-
+            next_q_target = self.target_model(next_state_batch.x, next_state_batch.edge_index, next_state_batch.batch, next_state_batch.edge_attr)
             next_q = next_q_target.gather(1, next_actions.unsqueeze(1)).squeeze(1)
 
             target = rewards + self.gamma * next_q * (1 - dones)
