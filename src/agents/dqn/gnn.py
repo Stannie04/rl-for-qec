@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch_geometric.nn import global_mean_pool, GraphConv
+import torch.nn.functional as F
 
 class GNN(torch.nn.Module):
     """
@@ -13,12 +14,15 @@ class GNN(torch.nn.Module):
 
     def __init__(
             self,
+            edge_index,
             hidden_channels_GCN=[32, 128, 256, 512, 512, 256, 256],
             hidden_channels_MLP=[256, 128, 64],
-            num_node_features=4,
-            num_classes=1,
+            num_node_features=3,
+            n_actions=1,
     ):
         super().__init__()
+
+        self.edge_index = torch.tensor(edge_index.detach().clone(), dtype=torch.long)
 
         # GCN layers
         channels = [num_node_features] + hidden_channels_GCN
@@ -35,23 +39,15 @@ class GNN(torch.nn.Module):
         )
 
         # Output layers (one for each class)
-        self.output_layer = nn.Linear(hidden_channels_MLP[-1], num_classes)
+        self.output_layer = nn.Linear(hidden_channels_MLP[-1], n_actions)
 
-    def forward(self, x, edge_index, batch, edge_attr):
-        #  node embeddings
-        for layer in self.graph_layers:
-            x = layer(x, edge_index, edge_attr)
-            x = torch.nn.functional.relu(x, inplace=True)
+    def forward(self, x):
+        for graph_layer in self.graph_layers:
+            x = F.relu(graph_layer(x, self.edge_index))
 
-        # graph embedding
-        x = global_mean_pool(x, batch)
+        # x = global_mean_pool(x, torch.zeros(x.size(0), dtype=torch.long, device=x.device))
 
-        # pass through MLPs
-        for layer in self.dense_layers:
-            x = layer(x)
-            x = torch.nn.functional.relu(x, inplace=True)
+        for dense_layer in self.dense_layers:
+            x = F.relu(dense_layer(x))
 
-        # output
-        output = self.output_layer(x)
-
-        return output
+        return self.output_layer(x).squeeze(-1)
