@@ -1,30 +1,47 @@
+from __future__ import annotations
 import time
+import torch
 import numpy as np
+from sympy import logcombine
 from tqdm import tqdm
-from stable_baselines3 import SAC
 from prettytable import PrettyTable
+import matplotlib.pyplot as plt
+import os
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
 
-from src.agents import RandomAgent, SilentAgent, DQNAgent
-from src.environments import QLDPCTrainEnv, QLDPCEvalEnv
+from src.agents import RandomAgent, SilentAgent, DQNAgent, SACAgent, MWPMAgent, BPAgent, BPOSDAgent
+from src.environment import QLDPCEnv
 from src.read_config import ConfigParser
 
 
 def render_example_environment(config):
-    env = QLDPCEvalEnv(config)
-    env.render()
+    env = QLDPCEnv(config)
+
+    for l in env.code.logical_x:
+        for j in torch.argwhere(l == 1).flatten():
+            env.code.flip(j)
+            env.code.update_graph()
+
+            print(f"Logical error: {env.code.has_logical_error()}")
+            print(f"Error free: {env.code.is_error_free()}\n")
+
+            env.render()
+
+        env.reset()
 
 
 def render_evaluation_episode(config, model_checkpoint, max_episode_steps=100):
 
-    model = SAC.load(model_checkpoint, device="cuda")
-
-    env = QLDPCTrainEnv(config)
+    env = QLDPCEnv(config)
+    agent = DQNAgent(env, config, evaluation_mode=True)
+    agent.model.load_state_dict(torch.load(model_checkpoint, map_location=config.device))
 
     obs, info = env.reset()
     env.render()
 
     for step in range(max_episode_steps):
-        action, _ = model.predict(obs, deterministic=True)
+        action, _ = agent.model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         print(f"Step {step+1}: Reward={reward}, Terminated={terminated}, Truncated={truncated}, Info={info}")
         print(f"Action taken: {action}")
@@ -44,7 +61,7 @@ def run_baselines(config):
 
     results = {}
     for agent, name in [(silent_agent, "Silent Agent"), (random_agent, "Random Agent")]:
-        env = QLDPCEvalEnv(config)
+        env = QLDPCEnv(config)
 
         total_rewards = []
         for i in tqdm(range(10_000), desc=f"Evaluating {name}"):
@@ -66,12 +83,13 @@ def run_baselines(config):
 
 
 def benchmark_env(config):
-
     start = time.time()
-    env = QLDPCEvalEnv(config, assert_env=True)
-    env.render(mode="edge_info")
+    env = QLDPCEnv(config)
 
-    agent = DQNAgent(env, config)
+    if config.verbose:
+        env.render(mode="edge_info")
+
+    agent = SACAgent(env, config)
     end = time.time()
     print(f"Initialization took {end - start:.5f} seconds")
 
@@ -85,7 +103,7 @@ def benchmark_env(config):
     for _ in tqdm(range(10_000), desc="Benchmarking environment and agent"):
 
         loop_start = time.time()
-        action = agent.select_action(obs)
+        action, _ = agent.select_action(obs)
         end = time.time()
         agent_times.append(end - loop_start)
 
@@ -119,23 +137,100 @@ def benchmark_env(config):
     print(t)
 
 
-def evaluate_agent(config: ConfigParser, state_dict: dict):
-    env = QLDPCEvalEnv(config)
-    agent = DQNAgent(env, config, evaluation_mode=True)
-    agent.model.load_state_dict(state_dict)
+def evaluate_agent(config: ConfigParser, agent_name=None, log_progress=False):
+    # Evaluate the logical error rate of the agent over a number of episodes, without exploration noise.
 
-    lengths = []
-    for _ in tqdm(range(config.num_eval_episodes), desc="Evaluating Agent", leave=False):
-        obs, info = env.reset()
-        done = False
+    results = {}
+    for error_rate in [0.001, 0.002, 0.003, 0.004, 0.005]:
 
-        episode_length = 0
-        while not done:
-            action = agent.select_action(obs)
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            episode_length += 1
+        logical_failures = 0
+        successes = 0
 
-        lengths.append(episode_length)
+        eval_env = QLDPCEnv(config)
+        eval_env.curriculum_error_rate = error_rate
 
-    return np.mean(lengths)
+        match agent_name:
+            case "sac":
+                agent = SACAgent(eval_env, config)
+                checkpoint = torch.load(f"checkpoints/{config.agent_name}_{config.code_name}.pt", map_location=config.device)
+                agent.actor.load_state_dict(checkpoint["actor"])
+                agent.critic1.load_state_dict(checkpoint["critic1"])
+                agent.critic2.load_state_dict(checkpoint["critic2"])
+            case "bp":
+                agent = BPAgent(eval_env, config)
+            case "bp_osd":
+                agent = BPOSDAgent(eval_env, config)
+            case "static":
+                agent = SilentAgent(eval_env, config)
+            case _:
+                raise NotImplementedError
+
+        returns = []
+        lengths = []
+
+        pbar = tqdm(range(config.num_eval_episodes), desc=f"Evaluating at error rate {error_rate:.2%}") if log_progress else range(config.num_eval_episodes)
+
+        for _ in pbar:
+            obs, info = eval_env.reset()
+            done = False
+            episode_return = 0.0
+            episode_length = 0
+
+            while not done:
+
+                action, _ = agent.select_action(obs, evaluate=True)
+                obs, reward, terminated, truncated, info = eval_env.step(action)
+                done = terminated or truncated
+                episode_length += 1
+                episode_return += reward.item()
+
+            lengths.append(episode_length)
+            returns.append(episode_return)
+
+            if eval_env.code.is_error_free():
+                successes += 1
+            else:
+                logical_failures += 1
+
+        results[error_rate] = float(logical_failures) / float(config.num_eval_episodes)
+
+    return {k: v for k, v in results.items()}
+
+
+def post_train_evaluation(config):
+    # Evaluate the agent at the end of training and print results to console.
+    static_agent_results = evaluate_agent(config, agent_name="static", log_progress=True)
+    eval_agent_results = evaluate_agent(config, agent_name=config.agent_name, log_progress=True)
+    bp_results = evaluate_agent(config, agent_name="bp", log_progress=True)
+    bp_osd_results = evaluate_agent(config, agent_name="bp_osd", log_progress=True)
+
+    print("\nFinal Evaluation Results:")
+    for key, value in eval_agent_results.items():
+        print(f"{key}: {value:.4f}")
+
+    print("\nStatic Baseline Results:")
+    for key, value in static_agent_results.items():
+        print(f"{key}: {value:.4f}")
+
+    print("\nBP Baseline Results:")
+    for key, value in bp_results.items():
+        print(f"{key}: {value:.4f}")
+
+    print("\nBP+OSD Baseline Results:")
+    for key, value in bp_osd_results.items():
+        print(f"{key}: {value:.4f}")
+
+
+    # Plot results
+    plot = plt.figure(figsize=(10, 6))
+    plt.plot(list(eval_agent_results.keys()), list(eval_agent_results.values()), marker='o', label=f"{config.agent_name.upper()}")
+    plt.plot(list(static_agent_results.keys()), list(static_agent_results.values()), marker='o', label="Static Agent")
+    plt.plot(list(bp_results.keys()), list(bp_results.values()), marker='o', label="BP")
+    plt.plot(list(bp_osd_results.keys()), list(bp_osd_results.values()), marker='o', label="BP+OSD")
+    plt.yscale('log')
+    plt.xlabel("Physical Error Rate")
+    plt.ylabel("Logical Error Rate")
+    plt.title(f"Logical Error Rate vs Physical Error Rate for {config.code_name}")
+    plt.grid(True, which="both", ls="--")
+    plt.legend()
+    plt.savefig(f"results/{config.agent_name}_{config.code_name}_evaluation.png")
