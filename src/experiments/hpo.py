@@ -1,9 +1,11 @@
 import optuna
 import numpy as np
 
-from src.environments import QLDPCTrainEnv
-from src.agents import DQNAgent
+from src.environment import QLDPCEnv
+from src.agents import DQNAgent, SACAgent
 from src.train_utils import evaluate_agent
+
+from tqdm import tqdm
 
 
 def sample_sac_params(trial: optuna.Trial) -> dict:
@@ -12,13 +14,19 @@ def sample_sac_params(trial: optuna.Trial) -> dict:
     """
     return {
         "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256, 512]),
-        "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
-        "buffer_size": trial.suggest_categorical("buffer_size", [100000, 200000, 500000]),
-        "gamma": trial.suggest_float("gamma", 0.95, 0.999),
-        "tau": trial.suggest_float("tau", 0.005, 0.02),
-        "train_freq": trial.suggest_categorical("train_freq", [1, 4, 8]),
-        "gradient_steps": trial.suggest_categorical("gradient_steps", [1, 4, 8]),
-        "ent_coef": trial.suggest_float("ent_coef", 1e-4, 1e-1, log=True),
+        "actor_learning_rate": trial.suggest_float("actor_learning_rate", 5e-6, 1e-3, log=True),
+        "critic_learning_rate": trial.suggest_float("critic_learning_rate", 5e-6, 1e-3, log=True),
+        "alpha_learning_rate": trial.suggest_float("alpha_learning_rate", 5e-6, 1e-3, log=True),
+        "replay_buffer_capacity": trial.suggest_int("replay_buffer_capacity", 10000, 1_000_000, log=True),
+        "gamma": trial.suggest_float("gamma", 0.90, 0.999),
+        "tau": trial.suggest_float("tau", 0.001, 0.02),
+        "train_frequency": trial.suggest_categorical("train_frequency", [1, 4, 8]),
+        "initial_alpha": trial.suggest_float("ent_coef", 1e-2, 3e-1, log=True),
+        "max_episode_length": trial.suggest_categorical("max_episode_length", [10, 50, 100]),
+        "curriculum_start_error_rate": trial.suggest_float("curriculum_start_error_rate", 0.01, 0.1),
+        "curriculum_end_error_rate": trial.suggest_float("curriculum_end_error_rate", 0.001, 0.01),
+        "curriculum_warmup_steps": trial.suggest_categorical("curriculum_warmup_steps", [1000, 5000, 10000]),
+        "hidden_dim": trial.suggest_categorical("hidden_dim", [128, 256, 512])
     }
 
 
@@ -42,48 +50,44 @@ def objective(trial: optuna.Trial, config) -> float:
     """
     Objective function for Optuna.
     """
-    env = QLDPCTrainEnv(config)
+    env = QLDPCEnv(config)
 
     # Sample hyperparameters
-    hyperparams = sample_dqn_params(trial)
-    agent = DQNAgent(env, config)
+    hyperparams = sample_sac_params(trial)
+    config.update(hyperparams)
+    agent = SACAgent(env, config)
 
     # Train
     rewards = []
-    lengths = []
+    scores = []
     obs, info = env.reset()
-    for step in range(100_000):
+    for step in range(config.num_timesteps):
 
-        action = agent.select_action(obs)
-
+        action, probs = agent.select_action(obs)
         next_obs, reward, terminated, truncated, info = env.step(action)
+        rewards.append(reward)
 
         agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
         obs = next_obs
 
         agent.train_step()
 
-        rewards.append(reward)
-
         if terminated or truncated:
             obs, info = env.reset()
 
-        if step % agent.eval_freq == 0:
-            lengths.append(evaluate_agent(config, agent.model.state_dict()))
-
-        if (step + 1) % agent.target_update_freq == 0:
-            agent.target_model.load_state_dict(agent.model.state_dict())
+        if step % config.steps_between_evaluation == 0:
+            scores.append(evaluate_agent(config, agent)["Evaluation/Score"])
 
     # Evaluate mean reward over last 100 episodes
-    eval_len = min(100, len(lengths))
-    mean_reward = np.mean(lengths[:eval_len])
+    eval_scores = min(100, len(scores))
+    mean_score = np.mean(scores[:eval_scores])
 
-    return mean_reward
+    return mean_score
 
 
-def optimize_hyperparameters(code_config, n_trials=100):
-    study = optuna.create_study(direction="maximize")
-    study.optimize(lambda trial: objective(trial, code_config), n_trials=n_trials)
+def optimize_hyperparameters(config, n_trials=1000):
+    study = optuna.create_study(direction="maximize", study_name="hpo", storage=f"sqlite:///hpo_study_{config.n}_{config.k}_{config.d}.db", load_if_exists=True)
+    study.optimize(lambda trial: objective(trial, config), n_trials=n_trials)
 
     print("Best hyperparameters:", study.best_params)
     return study.best_params

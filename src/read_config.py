@@ -3,7 +3,7 @@ import torch
 import prettytable
 
 class ConfigParser:
-    def __init__(self, config_dir, agent_name, code_name):
+    def __init__(self, config_dir, agent_name, code_name, verbose=False):
 
         with open(f"{config_dir}/train_config.yml", "r") as f:
             train_config = yaml.safe_load(f)
@@ -25,8 +25,10 @@ class ConfigParser:
 
         self.agent_name = agent_name
         self.code_name = code_name
+        self.verbose = verbose
 
-        self._print_configuration()
+        if self.verbose:
+            self._print_configuration()
 
 
     def _print_configuration(self):
@@ -37,3 +39,8 @@ class ConfigParser:
             table.add_row([key, value])
 
         print(table)
+
+
+    def update(self, new_params: dict):
+        for key, value in new_params.items():
+            setattr(self, key, value)
