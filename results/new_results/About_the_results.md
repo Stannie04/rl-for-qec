@@ -1,29 +1,15 @@
-# Discussion about the results in the "results/new_results" folder
+# About the results
 
-The experiment mainly focuses on splitting the environment into two parts:
-- A training environment, where the agent learns to decode simple errors as quickly as possible.
-- A testing environment, where the agent is evaluated on its ability to sustain a noisy environment as long as possible.
+The results compare the LER of the proposed neural SAC agent to belief propagation and BP+OSD, as well as a static baseline that performs no corrections and checks for errors within 10 environment steps.
 
-Previously, the agent was both trained en evaluated on the current "testing" objective. However, due to the large stochastity of this task,
-this casued the agent to learn both simple errors and very complex/unrealistic errors at the same time. Consequently, the agent 
-always converged to a policy in which it essentially passed on its actions, since it was not able to learn from its actions in the environment very well.
-This behaviour is reflected in `train_on_eval_env_ldpc.png", where convergence happens around the same value that a static agent is able to achieve.
+In the environment evaluated here, the graph nodes consist of 5 binary features [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome], with edges connecting stabilizers and data qubits as in the provided QEC code. The actor and critic networks both consist of a GNN encoder, comprised of three GraphConv layers. More than this seems to make the network overly complicated, causing irrecoverable overfitting on codes with 0-1 errors. The encoding is passed to an action MLP head, that outputs logits for each action, as well as a separate no-op head that outputs a single logit for no action, based on both the encoding and an additonal global mean pooling feature. The logits of both heads are concatenated, then an action is selected through argmax. The agent is trained on a curriculum, increasing the error rate of the environment initialization from 0.1% to 5% per physical qubit. 
 
-By training on a simpler environment first, the agent learns the code structure much more effectively, and is able to accurately decode simple errors.
-By understanding the code structure better, the agent is able to generalize much better to the testing environment.
-The results of training on the simplified environment are shown in `simplified_train_env.png", for both an [[18,4,4]] LDPC code and an [[18,2,3]] toric code.
+The agent shows comparable performance to the baseline algorithms, though it appears to struggle slightly more. The agent is able to correct a low number of physical errors with high accuracy, though it shows no particular advantage in decoding high-physical-error codes compared to BP. 
 
-The training curves in `simplified_train_env.png" are a bit misleading, since it looks like the agent is not learning at all. 
-However, it is important to note that the means of both LDPC and toric code agents are significantly higher than the static agent
-(approx. 200 steps for the static agent, approx. 1500 for LDPC and 2500 for toric), showing that both agents are able to counteract most errors in the environment.
-Since the agents are able to decode simple errors accurately, termination essentially becomes a waiting game for the environment
-to generate errors in more qubits than usual. This actually shows how quickly the agents are able to learn, since they find good policies almost immediately
-(Toric within 10k steps of training, LDPC within 200k).
+In my experience, restricting the agent to a single discrete action each iteration allows for much more stability in training, whereas outputting a full correction chain with continuous values causes too much variance for the agent to properly learn anything. I am revisiting the idea though, since the agent's potential would be much higher if it can be trained properly; any ideas on this would be appreciated.
 
-The increased frequency of outliers in the toric code agent, as well as the higher return of these outliers, shows that performance is
-dependent on the complexity of the code, with LDPC codes being more difficult to learn.
+The no-op head can likely be removed entirely in favour of only prompting the network whenever a syndrome is measured, meaning the network is forced to flip a qubit but only encounters environments with errors. I opted to not implement this yet, since I'm not aware whether this would be a possibility to implement in a real-world setting. If removed, performance would likely increase since the option to do nothing (and in turn, force all qubit logits to be very low) does not have to be taken into account.
 
-Since the main bottleneck for the agents currently is learning more complex errors, this simplified training environment
-will be seen as the first step in a potential curriculum learning pipeline. When the agents are able to understand simple errors,
-training can be continued on (a hybrid of) the testing environment to learn more complex errors. As a final step in this pipeline,
-adversarial learning may be able to be added back into the pipeline, to further improve the agent's performance on the testing environment.
+Another improvement not implemented here yet is the addition of syndrome history to the feature vector. For this, the graph encoding might need an additonal GRU/LSTM/Transformer head to account for accurate time embeddings, though considering how quick the agent overfits when adding additional GNN layers, a lot of additional stabilization / curriculum tuning needs to likely happen.
+
+One final thing to note is that I believe BP+OSD should able to achieve an LER of 10^-6 on the [[144,12,12]] code, based on the papers I've read on the algorithm. I am not sure whether that discrepancy is due to addtional micro-optimizations by the authors that are missing from my implementation (from the ldpc python package), or that something unexpected is happening. The latter would likely cause the SAC agent to increase in performance as well.
