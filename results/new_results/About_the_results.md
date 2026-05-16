@@ -1,6 +1,6 @@
 # About the results
 
-The results compare the LER of the proposed neural SAC agent to belief propagation and BP+OSD, as well as a static baseline that performs no corrections and checks for errors within 10 environment steps.
+The results compare the LER of the proposed neural SAC agent to belief propagation and BP+OSD, as well as a static baseline that performs no corrections and checks for errors within 10 environment steps. LER is evaluated across 10^6 shots.
 
 In the environment evaluated here, the graph nodes consist of 5 binary features [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome], with edges connecting stabilizers and data qubits as in the provided QEC code. The actor and critic networks both consist of a GNN encoder, comprised of three GraphConv layers. More than this seems to make the network overly complicated, causing irrecoverable overfitting on codes with 0-1 errors. The encoding is passed to an action MLP head, that outputs logits for each action, as well as a separate no-op head that outputs a single logit for no action, based on both the encoding and an additonal global mean pooling feature. The logits of both heads are concatenated, then an action is selected through argmax. The agent is trained on a curriculum, increasing the error rate of the environment initialization from 0.1% to 5% per physical qubit. 
 
