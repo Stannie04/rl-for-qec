@@ -12,4 +12,6 @@ The no-op head can likely be removed entirely in favour of only prompting the ne
 
 Another improvement not implemented here yet is the addition of syndrome history to the feature vector. For this, the graph encoding might need an additonal GRU/LSTM/Transformer head to account for accurate time embeddings, though considering how quick the agent overfits when adding additional GNN layers, a lot of additional stabilization / curriculum tuning needs to likely happen.
 
+An interesting thing to investigate might be the performance of the agent trained on code on code B, to evaluate the generazation capabilities of the agent. This is difficult to implement with the current environment setup, since the agent computes embeddings for a certain number of qubits, but this may be achieved though training a graph encoder separately, then finetuning the MLP head on the specific code.
+
 One final thing to note is that I believe BP+OSD should able to achieve an LER of 10^-6 on the [[144,12,12]] code, based on the papers I've read on the algorithm. I am not sure whether that discrepancy is due to addtional micro-optimizations by the authors that are missing from my implementation (from the ldpc python package), or that something unexpected is happening. The latter would likely cause the SAC agent to increase in performance as well.
