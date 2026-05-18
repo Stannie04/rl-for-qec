@@ -82,7 +82,7 @@ class SACAgent:
 
     def train_step(self):
         if len(self.replay_buffer) < self.batch_size:
-            return None, None, self.alpha  # Not enough data to train
+            return {}  # Not enough data to train
 
         state, action, reward, next_state, done = self.replay_buffer.sample(self.batch_size)
 
@@ -109,6 +109,7 @@ class SACAgent:
 
         q1_loss = F.mse_loss(q1, q_target)
         q2_loss = F.mse_loss(q2, q_target)
+        critic_loss = q1_loss + q2_loss
 
         self.critic1_opt.zero_grad()
         q1_loss.backward()
@@ -133,7 +134,6 @@ class SACAgent:
 
         entropy = -(probs * log_probs).sum(dim=1).detach()
         alpha_loss = -(self.log_alpha * (entropy - self.target_entropy).detach()).mean()
-        # alpha_loss = -(self.log_alpha * (self.target_entropy - entropy)).mean()
 
         self.alpha_opt.zero_grad()
         alpha_loss.backward()
@@ -147,7 +147,15 @@ class SACAgent:
 
         self.total_steps += 1
 
-        return actor_loss.item(), q1_loss.item() + q2_loss.item(), self.alpha
+        train_logs = {
+            "Loss/Actor Loss": actor_loss.item(),
+            "Loss/Critic Loss": critic_loss.item(),
+            "Loss/Alpha Loss": alpha_loss.item(),
+            "Monitoring/Alpha": self.alpha,
+        }
+
+        return train_logs
+
 
     def save(self, path):
         torch.save({

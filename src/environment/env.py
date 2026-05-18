@@ -65,17 +65,22 @@ class QLDPCEnv(gym.Env):
 
 
     def _get_info(self):
+        num_errors = self.code.x_errors.sum().item()
         return{
             "episode_steps": self.episode_steps,
             "correct_actions": self.correct_actions,
             "repeated_actions": self.repeated_actions,
-            "num_errors": self.code.x_errors.sum().item(),
+            "num_errors": num_errors,
             # "errors": torch.where(self.code.x_errors == 1)[0].cpu().numpy(),
+            "logs": {
+                    "Actions/Accuracy": np.mean(self.correct_actions[-100:]) if self.correct_actions else 0.0,
+                    "Actions/Repeated Actions": np.mean(self.repeated_actions[-100:]) if self.repeated_actions else 0.0,
+                    "Monitoring/Number of Errors": num_errors
+                }
         }
 
 
     def step(self, action):
-        # action = torch.argwhere(action.flatten() > self.threshold).flatten()
         reward = torch.tensor(0.0).to(self.device)
         actions = action.cpu().numpy()
 
@@ -105,24 +110,18 @@ class QLDPCEnv(gym.Env):
 
 
     def reset(self, seed=None, options=None):
-
         self.code.x_errors.zero_()
         self.code.z_errors.zero_()
 
         self.episode_steps = 0
         self.last_action = None
 
-        # n_flips = np.random.randint(1, self.curriculum_num_flips + 1)
-        # self.code.flip_set_number_of_qubits(n_flips)
         self.code.flip_randomly(self.curriculum_error_rate)
-
         self.code.update_graph()
-
-        self.previous_num_errors = self.code.x_errors.sum().item()
 
         x_syndrome, z_syndrome = self.code.get_syndrome()
         self.previous_num_syndromes = int(x_syndrome.sum().item() + z_syndrome.sum().item())
-
+        self.previous_num_errors = self.code.x_errors.sum().item()
         self.initial_errors = self.code.x_errors.sum().item()
 
         return self.observation, self._get_info()

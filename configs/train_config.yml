@@ -4,6 +4,7 @@ num_timesteps: 5000
 max_episode_length: 10
 
 # Evaluation parameters
+evaluate_during_training: False
 steps_between_evaluation: 100000
 num_eval_episodes: 10000
 
@@ -15,4 +16,5 @@ curriculum_end_weight: 5
 curriculum_warmup_steps: 25000
 
 # Logging parameters for Weights & Biases
+wandb_logging: True
 wandb_project: "rl-for-qec"

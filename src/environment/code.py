@@ -61,26 +61,6 @@ class QLDPCCode(gym.Env):
         return x_syndrome, z_syndrome
 
 
-    def get_action_mask(self):
-
-        _, z_syndrome = self.get_syndrome()
-
-        active_checks = torch.where(z_syndrome > 0)[0]
-
-        mask = torch.zeros(self.n_data + 1, device=self.device)
-
-        for check in active_checks:
-            connected = torch.where(self.H_z[check] > 0)[0]
-            mask[connected] = 1
-
-        #
-        # allow no-op always
-        #
-        mask[self.no_op_index] = 1
-
-        return mask
-
-
     def update_graph(self):
         # Graph node features are structured as follows:
         # [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome]
