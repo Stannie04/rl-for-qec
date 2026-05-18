@@ -1,5 +1,5 @@
 from src.experiments import train, optimize_hyperparameters
-from src.train_utils import run_baselines, benchmark_env, render_example_environment, post_train_evaluation
+from src.train_utils import run_baselines, benchmark_env, render_example_environment, post_train_evaluation, full_code_analysis
 from src.read_config import ConfigParser
 import argparse
 
@@ -21,6 +21,7 @@ def select_experiment(experiment_name):
         case "hpo": return optimize_hyperparameters
         case "render": return render_example_environment
         case "evaluate": return post_train_evaluation
+        case "analysis": return full_code_analysis
         case _: raise ValueError(f"Unknown experiment: {experiment_name}")
 
 

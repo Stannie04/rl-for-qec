@@ -10,7 +10,7 @@ import os
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 
-from src.agents import RandomAgent, SilentAgent, DQNAgent, SACAgent, MWPMAgent, BPAgent, BPOSDAgent
+from src.agents import RandomAgent, SilentAgent, DQNAgent, SACAgent, BPAgent, BPOSDAgent
 from src.environment import QLDPCEnv
 from src.read_config import ConfigParser
 

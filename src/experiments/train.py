@@ -5,7 +5,7 @@ import time
 from wandb import Histogram
 
 from src.environment import QLDPCEnv
-from src.agents import DQNAgent, SACAgent, MWPMAgent, BPAgent, BPOSDAgent
+from src.agents import DQNAgent, SACAgent, BPAgent, BPOSDAgent
 from src.train_utils import evaluate_agent, CurriculumScheduler
 
 
