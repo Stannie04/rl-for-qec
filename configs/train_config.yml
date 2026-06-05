@@ -1,5 +1,4 @@
 n_repetitions: 1
-#num_timesteps: 100000
 num_timesteps: 5000
 max_episode_length: 10
 
@@ -14,6 +13,9 @@ curriculum_end_error_rate: 0.05
 curriculum_start_weight: 1
 curriculum_end_weight: 5
 curriculum_warmup_steps: 25000
+
+# MoE training parameters
+moe_num_timesteps: 500000
 
 # Logging parameters for Weights & Biases
 wandb_logging: True

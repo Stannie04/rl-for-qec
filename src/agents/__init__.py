@@ -3,3 +3,4 @@ from .sac.sac import SACAgent
 from .baselines.random_agent import RandomAgent
 from .baselines.silent_agent import SilentAgent
 from .baselines.belief_propagation import BPAgent, BPOSDAgent
+from .moe.moe import MoEAgent

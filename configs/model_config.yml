@@ -46,3 +46,19 @@ sac:
 
   use_action_mask: False
   use_noop_head: True
+
+moe:
+  moe_experts:
+    - bp
+    - bp_osd
+
+  moe_hidden_layers_gnn:
+    - 32
+    - 128
+    - 64
+
+  moe_hidden_layers_mlp:
+    - 128
+    - 64
+
+  moe_learning_rate: 0.0001

@@ -1,4 +1,4 @@
-from src.experiments import train, optimize_hyperparameters
+from src.experiments import train, optimize_hyperparameters, train_moe
 from src.train_utils import run_baselines, benchmark_env, render_example_environment, post_train_evaluation, full_code_analysis
 from src.read_config import ConfigParser
 import argparse
@@ -16,6 +16,7 @@ def parse_args():
 def select_experiment(experiment_name):
     match experiment_name:
         case "train": return train
+        case "moe": return train_moe
         case "baselines": return run_baselines
         case "benchmark": return benchmark_env
         case "hpo": return optimize_hyperparameters

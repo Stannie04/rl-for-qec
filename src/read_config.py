@@ -15,9 +15,10 @@ class ConfigParser:
         with open(f"{config_dir}/model_config.yml", "r") as f:
             all_model_configs = yaml.safe_load(f)
             model_config = all_model_configs[agent_name]
+            moe_config = all_model_configs["moe"]
 
         # Get all the parameters in the config files, and make them attributes of this class
-        for c in [train_config, code_config, model_config]:
+        for c in [train_config, code_config, model_config, moe_config]:
             for key, value in c.items():
                 setattr(self, key, value)
 
