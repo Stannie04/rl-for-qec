@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 from src.environment import QLDPCEnv
 from src.agents import DQNAgent, SACAgent, MoEAgent, BPAgent, BPOSDAgent
-from src.train_utils import sample_shots, load_mistakes
+from src.train_utils import load_mistakes
 
 def get_physical_error_rate(config, step):
     return config.moe_start_p + (step / config.moe_num_timesteps) * (config.moe_end_p - config.moe_start_p)

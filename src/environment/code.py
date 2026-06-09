@@ -41,7 +41,6 @@ class QLDPCCode(gym.Env):
         syndrome_z = (self.z_errors.unsqueeze(0) @ self.logical_x.T) % 2
 
         return (syndrome_x.any() or syndrome_z.any()).item()
-        # return self.x_errors.sum().item() > 6 or self.z_errors.sum().item() > 6
 
 
     def is_error_free(self) -> bool:
