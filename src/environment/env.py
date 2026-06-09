@@ -8,7 +8,7 @@ from src.environment.code import QLDPCCode
 
 class QLDPCEnv(gym.Env):
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser, shots=None):
         super().__init__()
         self.device = config.device
 
@@ -30,6 +30,7 @@ class QLDPCEnv(gym.Env):
         self.correct_actions = []
         self.repeated_actions = []
 
+        self.shots = shots
 
     @property
     def observation(self):
@@ -104,7 +105,6 @@ class QLDPCEnv(gym.Env):
             self.last_action = action
 
         self.episode_steps += 1
-        # self.code.flip_randomly(self.curriculum_error_rate)
         self.code.update_graph()
         return self.observation, reward, self.terminated, self.truncated, self._get_info()
 
@@ -116,7 +116,15 @@ class QLDPCEnv(gym.Env):
         self.episode_steps = 0
         self.last_action = None
 
-        self.code.flip_randomly(self.curriculum_error_rate)
+        if self.shots is not None:
+            # Pop shot from the list
+            shot = self.shots.pop(0)
+            self.code.set_error_pattern(shot[0], shot[1])
+        else:
+            # Ensure at least one error is present at the start of each episode to combat no-op bias
+            self.code.flip_set_number_of_qubits(1)
+            self.code.flip_randomly(self.curriculum_error_rate)
+
         self.code.update_graph()
 
         x_syndrome, z_syndrome = self.code.get_syndrome()

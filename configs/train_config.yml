@@ -15,7 +15,10 @@ curriculum_end_weight: 5
 curriculum_warmup_steps: 25000
 
 # MoE training parameters
-moe_num_timesteps: 500000
+moe_num_timesteps: 1000
+moe_start_p: 0.15
+moe_end_p: 0.05
+moe_time_penalty_factor: 100
 
 # Logging parameters for Weights & Biases
 wandb_logging: True

@@ -51,6 +51,7 @@ moe:
   moe_experts:
     - bp
     - bp_osd
+    - sac
 
   moe_hidden_layers_gnn:
     - 32
@@ -62,3 +63,4 @@ moe:
     - 64
 
   moe_learning_rate: 0.0001
+  latency_penalty_factor: 10 # 0 for no penalty

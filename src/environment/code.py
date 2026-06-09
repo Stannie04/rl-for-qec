@@ -97,6 +97,15 @@ class QLDPCCode(gym.Env):
         self.flip(torch.randperm(self.n_data, device=self.device)[:num_flips])
 
 
+    def set_error_pattern(self, error_pattern_x, error_pattern_z):
+        if len(error_pattern_x) != self.n_data or len(error_pattern_z) != self.n_data:
+            raise ValueError(f"Error patterns must have length {self.n_data}, got {len(error_pattern_x)} and {len(error_pattern_z)}")
+
+        self.x_errors = torch.tensor(error_pattern_x, dtype=torch.float32, device=self.device)
+        self.z_errors = torch.tensor(error_pattern_z, dtype=torch.float32, device=self.device)
+
+        self.update_graph()
+
     #
     # Private helper functions for initializing the code structure, calculating logical operators, and rendering the graph.
     #

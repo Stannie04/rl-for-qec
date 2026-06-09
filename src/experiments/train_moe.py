@@ -3,26 +3,32 @@ from tqdm import tqdm
 import torch
 from src.environment import QLDPCEnv
 from src.agents import DQNAgent, SACAgent, MoEAgent, BPAgent, BPOSDAgent
+from src.train_utils import sample_shots, load_mistakes
+
+def get_physical_error_rate(config, step):
+    return config.moe_start_p + (step / config.moe_num_timesteps) * (config.moe_end_p - config.moe_start_p)
 
 
 def moe_training_loop(config, env, agent, expert_list):
     start_time = time.time()
 
     successes = 0
-    for _ in range(config.moe_num_timesteps):
+    for step in range(config.moe_num_timesteps):
+        error_rate = get_physical_error_rate(config, step)
+        env.curriculum_error_rate = error_rate
         obs, info = env.reset()
         action, log_prob = agent.select_action(obs)
         decoder = expert_list[action]
-        reward = decoder_inference(decoder, env, obs)
+        reward = decoder_inference(config, decoder, env, obs)
         loss = agent.update(log_prob, reward)
 
-        print(f"Step {_+1}/{config.moe_num_timesteps}, Action: {action}, Reward: {reward:.4f}, Loss: {loss:.4f}")
+        print(f"Step {step+1}/{config.moe_num_timesteps}, p: {error_rate:.4f}, Action: {action}, Reward: {reward:.4f}, Loss: {loss:.4f}")
 
 
     print(f"MoE Training completed in {time.time() - start_time:.2f} seconds. Success rate: {successes / config.moe_num_timesteps:.4f}")
 
 
-def decoder_inference(agent, env,obs):
+def decoder_inference(config, agent, env, obs):
 
     start_time = time.time()
     done = False
@@ -32,7 +38,7 @@ def decoder_inference(agent, env,obs):
         done = terminated or truncated
 
     end_time = time.time()
-    return env.code.is_error_free() - 100 * (end_time - start_time)
+    return env.code.is_error_free() - config.moe_time_penalty_factor * (end_time - start_time)
 
 
 def get_decoders(config, env):
@@ -55,9 +61,10 @@ def get_decoders(config, env):
 
 
 def train_moe(config):
-    env = QLDPCEnv(config)
+    # shots = sample_shots(config, num_samples=config.moe_num_timesteps)
+    shots = load_mistakes(config)
+    env = QLDPCEnv(config, shots)
     agent = MoEAgent(config, env)
-
     expert_list = get_decoders(config, env)
 
     moe_training_loop(config, env, agent, expert_list)
