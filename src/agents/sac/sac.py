@@ -19,7 +19,9 @@ class ReplayBuffer:
 
     def push(self, state, action, reward, next_state, done):
         # Store transition (state: Data, next_state: Data)
-        self.buffer.append((state, action, reward, next_state, done))
+        # self.buffer.append((state, action, reward, next_state, done))
+        for a in action:
+            self.buffer.append((state, a, reward, next_state, done))
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
@@ -63,17 +65,21 @@ class SACAgent:
         self.tau = config.tau
 
         self.total_steps = 0
-
+        self.inference_threshold = config.inference_threshold
 
     def select_action(self, state, evaluate=False):
 
         if self.discrete:
             with torch.no_grad():
                 logits, log_probs, probs = self.actor(state.to(self.device))
+
                 if evaluate:
-                    action = probs.argmax(dim=-1)
+                    action = (probs[0] > 0.2).nonzero().squeeze(1)
+                    if action.numel() == 0: # Ensure at least one action is selected
+                        action = probs.argmax(dim=-1)
                 else:
                     action = Categorical(probs).sample()
+
             return action, probs
 
         else:

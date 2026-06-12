@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 from src.environment import QLDPCEnv
 from src.agents import DQNAgent, SACAgent, MoEAgent, BPAgent, BPOSDAgent
-from src.train_utils import load_mistakes
+from src.train_utils import load_shots
 
 def get_physical_error_rate(config, step):
     return config.moe_start_p + (step / config.moe_num_timesteps) * (config.moe_end_p - config.moe_start_p)
@@ -61,8 +61,7 @@ def get_decoders(config, env):
 
 
 def train_moe(config):
-    # shots = sample_shots(config, num_samples=config.moe_num_timesteps)
-    shots = load_mistakes(config)
+    shots = load_shots(config, dataset_type="random_nonzero")
     env = QLDPCEnv(config, shots)
     agent = MoEAgent(config, env)
     expert_list = get_decoders(config, env)

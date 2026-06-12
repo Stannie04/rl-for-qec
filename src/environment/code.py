@@ -15,7 +15,7 @@ class QLDPCCode(gym.Env):
 
         self.n, self.k, self.d = config.n, config.k, config.d
         self.l, self.m = config.l, config.m
-        self.n_data, self.n_stabilizers = 2*self.l*self.m, 2*self.l*self.m
+        self.n_data, self.n_stabilizers = 2*self.l*self.m, self.l*self.m # NOTE: stabilizers are split evenly between X and Z, so total stabilizers is l*m, not 2*l*m
         self.no_op_index = self.n_data  # Action index for "no operation"
 
         self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices(config.code_params)
@@ -27,50 +27,46 @@ class QLDPCCode(gym.Env):
         self.x_idx = torch.tensor([self.node_to_index[f"x{i}"] for i in range(self.H_x.shape[0])], dtype=torch.long, device=self.device)
         self.z_idx = torch.tensor([self.node_to_index[f"z{i}"] for i in range(self.H_z.shape[0])], dtype=torch.long, device=self.device)
 
-        self.x_errors = torch.zeros(self.n_data, dtype=torch.float32, device=self.device)
-        self.z_errors = torch.zeros(self.n_data, dtype=torch.float32, device=self.device)
+        self.x_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
+        self.z_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
+        self.x_syndrome = torch.zeros(self.n_stabilizers, dtype=torch.long, device=self.device)
+        self.z_syndrome = torch.zeros(self.n_stabilizers, dtype=torch.long, device=self.device)
+        self.num_x_errors, self.num_z_errors = 0, 0
 
-        self.logical_x, self.logical_z = self._get_logical_operators()
+        self.logical_x, self.logical_x_T, self.logical_z, self.logical_z_T = self._get_logical_operators()
 
         if validate:
             self._assert_valid_code()
 
 
-    def has_logical_error(self) -> bool:
-        syndrome_x = (self.x_errors.unsqueeze(0) @ self.logical_z.T) % 2
-        syndrome_z = (self.z_errors.unsqueeze(0) @ self.logical_x.T) % 2
+    def has_logical_error(self) -> torch.Tensor:
+        syndrome_x = (self.x_errors.float().unsqueeze(0) @ self.logical_z_T) % 2
+        syndrome_z = (self.z_errors.float().unsqueeze(0) @ self.logical_x_T) % 2
 
-        return (syndrome_x.any() or syndrome_z.any()).item()
+        return syndrome_x.any() or syndrome_z.any()
 
 
     def is_error_free(self) -> bool:
-        return (self.x_errors.sum() == 0 and self.z_errors.sum() == 0).item()
+        return self.num_x_errors == 0 and self.num_z_errors == 0
 
 
-    def get_syndrome(self):
-        """
-        Returns:
-            x_syndrome: Tensor of shape (n_x,) where n_x is the number of X stabilizers. Each entry is 0 or 1 indicating whether that stabilizer is violated by Z errors.
-            z_syndrome: Tensor of shape (n_z,) where n_z is the number of Z stabilizers. Each entry is 0 or 1 indicating whether that stabilizer is violated by X errors.
-        """
+    def reset_syndrome(self) -> None:
 
-        x_syndrome = (self.H_x @ self.z_errors) % 2
-        z_syndrome = (self.H_z @ self.x_errors) % 2
-
-        return x_syndrome, z_syndrome
+        # self.x_syndrome = (self.H_x @ self.z_errors) % 2
+        # self.z_syndrome = (self.H_z @ self.x_errors) % 2
+        self.x_syndrome = ((self.H_x.float() @ self.z_errors.float()) % 2).long()
+        self.z_syndrome = ((self.H_z.float() @ self.x_errors.float()) % 2).long()
 
 
-    def update_graph(self):
+    def update_graph(self) -> None:
         # Graph node features are structured as follows:
         # [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome]
 
-        x_syndrome, z_syndrome = self.get_syndrome()
-
-        self.data.x[self.x_idx, 3] = x_syndrome.float()
-        self.data.x[self.z_idx, 4] = z_syndrome.float()
+        self.data.x[self.x_idx, 3] = self.x_syndrome.float()
+        self.data.x[self.z_idx, 4] = self.z_syndrome.float()
 
 
-    def flip(self, qubit_index, error_type=1):
+    def flip(self, qubit_index, error_type=1) -> None:
         # error_type = 1: X error
         # error_type = 2: Z error
         # error_type = 3: Y error
@@ -78,32 +74,45 @@ class QLDPCCode(gym.Env):
             return
 
         if error_type != 2:
-            self.x_errors[qubit_index] = 1 - self.x_errors[qubit_index]
+            self.num_x_errors += 1 - 2 * self.x_errors[qubit_index]
+            self.x_errors[qubit_index] ^= 1
+            self.x_syndrome ^= self.H_x[:, qubit_index].flatten()
 
         if error_type != 1:
-            self.z_errors[qubit_index] = 1 - self.z_errors[qubit_index]
+            self.num_z_errors += 1 - 2 * self.z_errors[qubit_index]
+            self.z_errors[qubit_index] ^= 1
+            self.z_syndrome ^= self.H_z[:, qubit_index].flatten()
 
 
-    def flip_randomly(self, error_rate):
+    def flip_randomly(self, error_rate) -> None:
         action_mask = torch.rand(self.n_data, device=self.device) < error_rate
         actions = torch.where(action_mask)[0]
 
-        for action in actions:
+        for action in actions.tolist():
             self.flip(action)
 
 
-    def flip_set_number_of_qubits(self, num_flips):
+    def flip_set_number_of_qubits(self, num_flips) -> None:
         self.flip(torch.randperm(self.n_data, device=self.device)[:num_flips])
 
 
-    def set_error_pattern(self, error_pattern_x, error_pattern_z):
+    def set_error_pattern(self, error_pattern_x, error_pattern_z) -> None:
         if len(error_pattern_x) != self.n_data or len(error_pattern_z) != self.n_data:
             raise ValueError(f"Error patterns must have length {self.n_data}, got {len(error_pattern_x)} and {len(error_pattern_z)}")
 
-        self.x_errors = torch.tensor(error_pattern_x, dtype=torch.float32, device=self.device)
-        self.z_errors = torch.tensor(error_pattern_z, dtype=torch.float32, device=self.device)
+        self.x_errors = torch.tensor(error_pattern_x, dtype=torch.long, device=self.device)
+        self.z_errors = torch.tensor(error_pattern_z, dtype=torch.long, device=self.device)
+        self.num_x_errors = error_pattern_x.sum()
+        self.num_z_errors = error_pattern_z.sum()
+        self.reset_syndrome()
 
-        self.update_graph()
+
+    def clear_errors(self) -> None:
+        self.x_errors.zero_()
+        self.z_errors.zero_()
+        self.x_syndrome.zero_()
+        self.z_syndrome.zero_()
+        self.num_x_errors, self.num_z_errors = 0, 0
 
     #
     # Private helper functions for initializing the code structure, calculating logical operators, and rendering the graph.
@@ -149,10 +158,10 @@ class QLDPCCode(gym.Env):
 
         # logical Z = ker(H_x) / row(H_z)
         # logical X = ker(H_z) / row(H_x)
-        logical_z = torch.tensor(quotient_basis(H_x_gf2.null_space(), H_z_gf2.row_space()), dtype=torch.float32, device=self.device)
-        logical_x = torch.tensor(quotient_basis(H_z_gf2.null_space(), H_x_gf2.row_space()), dtype=torch.float32, device=self.device)
+        logical_z = torch.tensor(quotient_basis(H_x_gf2.null_space(), H_z_gf2.row_space()), dtype=torch.long, device=self.device)
+        logical_x = torch.tensor(quotient_basis(H_z_gf2.null_space(), H_x_gf2.row_space()), dtype=torch.long, device=self.device)
 
-        return logical_x, logical_z
+        return logical_x, logical_x.T.float(), logical_z, logical_z.T.float()
 
 
     def _init_parity_check_matrices(self, params):
@@ -181,10 +190,10 @@ class QLDPCCode(gym.Env):
         H_x = np.hstack([A, B])
         H_z = np.hstack([B.T, A.T])
 
-        H_x = torch.tensor(H_x, dtype=torch.float32, device=self.device)
-        H_z = torch.tensor(H_z, dtype=torch.float32, device=self.device)
-        H_x_T = H_x.t().to_sparse()
-        H_z_T = H_z.t().to_sparse()
+        H_x = torch.tensor(H_x, dtype=torch.long, device=self.device)
+        H_z = torch.tensor(H_z, dtype=torch.long, device=self.device)
+        H_x_T = H_x.t().contiguous()
+        H_z_T = H_z.t().contiguous()
 
         return H_x, H_x_T, H_z, H_z_T
 
@@ -372,6 +381,7 @@ class QLDPCCode(gym.Env):
 
         print("Code validation passed: all checks successful.")
         return True
+
 
     def render(self, mode="human"):
 

@@ -3,11 +3,11 @@ import numpy as np
 import time
 
 from wandb import Histogram
-
+from tqdm import tqdm
 from src.environment import QLDPCEnv
 from src.agents import DQNAgent, SACAgent, BPAgent, BPOSDAgent
-from src.train_utils import evaluate_agent, CurriculumScheduler
-
+from src.train_utils import evaluate_agent, CurriculumScheduler, load_shots
+import torch
 
 def get_reset_logs(episode_reward, info, start_errors):
     return {
@@ -41,10 +41,11 @@ def single_agent_training_loop(env, agent, config):
     obs, info = env.reset()
     start_errors = info["num_errors"]
 
-    for step in range(config.num_timesteps):
+    # for step in tqdm(range(config.num_timesteps)):
+    for step in tqdm(range(env.num_shots)):
         train_step_logs, done_logs, eval_logs = {}, {}, {}
 
-        action, probs = agent.select_action(obs)
+        action, probs = agent.select_action(obs, evaluate=True)
         next_obs, reward, terminated, truncated, info = env.step(action)
         agent.replay_buffer.push(obs, action, reward, next_obs, (terminated or truncated))
         obs = next_obs
@@ -74,7 +75,8 @@ def train(config):
     if config.wandb_logging:
         wandb.init(project=config.wandb_project, tags=[f"{config.agent_name}", f"{config.code_name}"], config=config.__dict__, dir="/tmp/wandb")
 
-    env = QLDPCEnv(config)
+    shots = load_shots(config, dataset_type="nonzero")
+    env = QLDPCEnv(config, shots)
     agent = SACAgent(env, config)
 
     for i in range(config.n_repetitions):
@@ -85,3 +87,26 @@ def train(config):
         wandb.finish()
 
     agent.save(f"checkpoints/{config.agent_name}_{config.code_name}.pt")
+
+
+def finetune(config):
+
+    if config.wandb_logging:
+        wandb.init(project=config.wandb_project, tags=[f"{config.agent_name}", f"{config.code_name}"], config=config.__dict__, dir="/tmp/wandb")
+
+    shots = load_shots(config, dataset_type="mistakes")
+    env = QLDPCEnv(config, shots)
+    agent = SACAgent(env, config)
+    checkpoint = torch.load(f"checkpoints/{config.agent_name}_{config.code_name}.pt", map_location=config.device)
+    agent.actor.load_state_dict(checkpoint["actor"])
+    agent.critic1.load_state_dict(checkpoint["critic1"])
+    agent.critic2.load_state_dict(checkpoint["critic2"])
+
+    for i in range(config.n_repetitions):
+        print(f"Starting training run {i+1}/{config.n_repetitions}")
+        single_agent_training_loop(env, agent, config)
+
+    if config.wandb_logging:
+        wandb.finish()
+
+    agent.save(f"checkpoints/{config.agent_name}_{config.code_name}_finetuned.pt")

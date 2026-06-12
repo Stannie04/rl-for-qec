@@ -1,34 +1,98 @@
 """Module for creating synthetic datasets for training."""
 
 import os
-
-import torch
 import numpy as np
+import torch
 from tqdm import tqdm
 
 from src.environment import QLDPCEnv
 from src.agents import SACAgent, BPAgent, BPOSDAgent
 
 
-import numpy as np
-from tqdm import tqdm
+def load_shots(config, dataset_type="random", noise_model="bit_flip"):
+    match dataset_type:
+        case "random": shots = np.load(f"datasets/{config.code_name}/random_{noise_model}.npy", allow_pickle=True)
+        case "uniform": shots = np.load(f"datasets/{config.code_name}/uniform_{noise_model}.npy", allow_pickle=True)
+        case "nonzero": shots = np.load(f"datasets/{config.code_name}/nonzero_{noise_model}.npy", allow_pickle=True)
+        case "mistakes":
+            shots = []
+            for agent_name in config.moe_experts:
+                mistakes = np.load(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}.npy", allow_pickle=True)
+                shots.append(mistakes)
+            shots = np.concatenate(shots, axis=0)
 
+            # Order by number of errors to speed up training
+            num_errors = np.sum(shots[:, 0, :], axis=1) + np.sum(shots[:, 1, :], axis=1)
+            sorted_indices = np.argsort(num_errors)
+            shots = shots[sorted_indices]
 
-def create_dataset_from_random_shots(config, num_samples):
-    env = QLDPCEnv(config)
-    shots = []
-    for _ in tqdm(range(num_samples), desc="Sampling shots", leave=False):
-        obs, info = env.reset()
-        shots.append((env.code.x_errors.cpu().numpy(), env.code.z_errors.cpu().numpy()))
-
-    os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
-    np.save(f"datasets/{config.code_name}/random_shots.npy", np.array(shots))
-    print(f"Collected {len(shots)} shots for code {config.code_name}.")
+        case _: raise ValueError(f"Unknown dataset type: {dataset_type}")
 
     return shots
 
 
-def create_dataset_from_expert_mistakes(config, agent_name):
+def create_dataset_from_random_shots(config, num_samples, error_rate, noise_model="bit_flip", save=False):
+
+    print(f"Creating dataset of {num_samples} random shots for code {config.code_name}")
+    physical_error_rate = error_rate / 2 if noise_model == "depolarizing" else error_rate
+
+    shots = np.zeros((num_samples, 2, config.n), dtype=np.int8)
+    shots[:, 0, :] = np.random.rand(num_samples, config.n) < physical_error_rate
+
+    if noise_model == "depolarizing":
+        shots[:, 1, :] = np.random.rand(num_samples, config.n) < physical_error_rate
+
+    if save:
+        os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/random_{noise_model}.npy", shots)
+
+    return shots
+
+def create_dataset_from_uniform_shots(config, num_samples_per_error, noise_model="bit_flip", save=False):
+
+    print(f"Creating dataset of {num_samples_per_error} uniform random shots for code {config.code_name}")
+    shots = np.zeros((num_samples_per_error*4, 2, config.n), dtype=np.int8)
+
+    for num_errors in tqdm(range(1, 5), desc="Generating uniform random shots", leave=False):
+        for i in range(num_samples_per_error):
+            idx = (num_errors-1)*num_samples_per_error + i
+            error_indices = np.random.choice(config.n, num_errors, replace=False)
+            shots[idx, 0, error_indices] = 1
+
+            if noise_model == "depolarizing":
+                z_error_indices = np.random.choice(config.n, num_errors, replace=False)
+                shots[idx, 1, z_error_indices] = 1
+
+    if save:
+        os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/uniform_{noise_model}.npy", shots)
+
+    return shots
+
+
+def create_dataset_from_nonzero_shots(config, num_samples, error_rate, noise_model="bit_flip", save=False):
+
+    print(f"Creating dataset of {num_samples} nonzero random shots for code {config.code_name}")
+
+    physical_error_rate = error_rate / 2 if noise_model == "depolarizing" else error_rate
+    error_types = [0, 1] if noise_model == "depolarizing" else [0]
+
+    for error_type in error_types:
+        shots = np.zeros((num_samples, 2, config.n), dtype=np.int8)
+        shots[:, error_type, :] = np.random.rand(num_samples, config.n) < physical_error_rate
+
+        # add exactly one extra 1 per sample
+        rows = np.arange(num_samples)
+        cols = np.random.randint(0, config.n, size=num_samples)
+        shots[rows, error_type, cols] = 1
+
+    if save:
+        os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/nonzero_{noise_model}.npy", shots)
+
+    return shots
+
+def create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform", noise_model="bit_flip", save=False):
 
     env = QLDPCEnv(config)
     match agent_name:
@@ -38,54 +102,35 @@ def create_dataset_from_expert_mistakes(config, agent_name):
             agent.actor.load_state_dict(checkpoint["actor"])
             agent.critic1.load_state_dict(checkpoint["critic1"])
             agent.critic2.load_state_dict(checkpoint["critic2"])
-        case "bp":
-            agent = BPAgent(env, config)
-        case "bp_osd":
-            agent = BPOSDAgent(env, config)
-        case _:
-            raise NotImplementedError
+        case "bp": agent = BPAgent(env, config)
+        case "bp_osd": agent = BPOSDAgent(env, config)
+        case _: raise NotImplementedError
 
     dataset = []
-    shots = load_shots(config)
+    shots = load_shots(config, dataset_type=shot_type, noise_model=noise_model)
     for error_pattern_x, error_pattern_z in tqdm(shots, desc=f"Creating dataset for {agent_name}", leave=False):
+        obs, info = env.reset_with_error_pattern(error_pattern_x, error_pattern_z)
 
-        env.code.set_error_pattern(error_pattern_x, error_pattern_z)
-        obs = env.observation
-
-        done = False
+        done = info["error_free"]
         while not done:
             action, _ = agent.select_action(obs, evaluate=True)
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
 
-        if not env.code.is_error_free():
+        if not info["error_free"]:
             dataset.append([error_pattern_x, error_pattern_z])
 
     print(f"Collected {len(dataset)} samples of expert mistakes for agent {agent_name} on code {config.code_name}.")
 
-    os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
-    np.save(f"datasets/{config.code_name}/mistakes_{agent_name}.npy", np.array(dataset))
-
+    if save:
+        os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}.npy", np.array(dataset))
 
 
 def create_all_datasets(config):
-    create_dataset_from_random_shots(config, num_samples=int(1e3))
+    # create_dataset_from_random_shots(config, num_samples=int(1e6), noise_model="bit_flip, save=True)
+    # create_dataset_from_nonzero_shots(config, num_samples=int(1e6), noise_model="bit_flip, save=True)
+    create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), noise_model="bit_flip", save=True)
 
-    # for agent_name in ["sac", "bp", "bp_osd"]:
-    for agent_name in ["sac"]:
-        create_dataset_from_expert_mistakes(config, agent_name)
-
-
-def load_mistakes(config):
-    all_mistakes = []
-
-    for agent_name in config.moe_experts:
-        mistakes = np.load(f"datasets/{config.code_name}/mistakes_{agent_name}.npy", allow_pickle=True)
-        all_mistakes.append(mistakes)
-
-    return all_mistakes
-
-
-def load_shots(config):
-    shots = np.load(f"datasets/{config.code_name}/random_shots.npy", allow_pickle=True)
-    return shots
+    for agent_name in ["sac", "bp", "bp_osd"]:
+        create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform", noise_model="bit_flip", save=True)

@@ -13,6 +13,7 @@ from concurrent.futures import ProcessPoolExecutor
 from src.agents import RandomAgent, SilentAgent, DQNAgent, SACAgent, BPAgent, BPOSDAgent
 from src.environment import QLDPCEnv
 from src.read_config import ConfigParser
+from src.train_utils.datasets import create_dataset_from_random_shots
 
 
 def render_example_environment(config):
@@ -140,13 +141,17 @@ def benchmark_env(config):
 def evaluate_agent(config: ConfigParser, agent_name=None, log_progress=False):
     # Evaluate the logical error rate of the agent over a number of episodes, without exploration noise.
 
+    print("\n", "="*20, f"Evaluating Agent: {agent_name.upper()}", "="*20, "\n")
     results = {}
-    for error_rate in [0.001, 0.002, 0.003, 0.004, 0.005]:
+    for error_rate in [0.001, 0.003, 0.005]:
 
+        # NOTE: we create 10 times the number of samples we need for evaluation to ensure we have enough unique episodes, since some episodes may be duplicates due to the random sampling process.
+        # The sampling process is fast enough that this does not cause a significant slowdown.
+        shots = create_dataset_from_random_shots(config, num_samples=config.num_eval_episodes*10, error_rate=error_rate, noise_model="bit_flip")
         logical_failures = 0
         successes = 0
 
-        eval_env = QLDPCEnv(config)
+        eval_env = QLDPCEnv(config, shots)
         eval_env.curriculum_error_rate = error_rate
 
         match agent_name:
@@ -172,13 +177,13 @@ def evaluate_agent(config: ConfigParser, agent_name=None, log_progress=False):
 
         for _ in pbar:
             obs, info = eval_env.reset()
-            done = False
+            done = info["error_free"]
             episode_return = 0.0
             episode_length = 0
 
             while not done:
 
-                action, _ = agent.select_action(obs, evaluate=True)
+                action, probs = agent.select_action(obs, evaluate=True)
                 obs, reward, terminated, truncated, info = eval_env.step(action)
                 done = terminated or truncated
                 episode_length += 1
@@ -187,29 +192,25 @@ def evaluate_agent(config: ConfigParser, agent_name=None, log_progress=False):
             lengths.append(episode_length)
             returns.append(episode_return)
 
-            if eval_env.code.is_error_free():
+            if info["error_free"]:
                 successes += 1
-            else:
+            else: # NOTE: This fails both for logical errors and for truncation.
                 logical_failures += 1
 
         results[error_rate] = float(logical_failures) / float(config.num_eval_episodes)
+        print(f"Error Rate: {error_rate:.2%}, Logical Error Rate: {results[error_rate]:.4f}, Avg Return: {np.mean(returns):.4f}, Avg Length: {np.mean(lengths):.2f}\n")
 
     return {k: v for k, v in results.items()}
 
 
 def post_train_evaluation(config):
     # Evaluate the agent at the end of training and print results to console.
-    static_agent_results = evaluate_agent(config, agent_name="static", log_progress=True)
     eval_agent_results = evaluate_agent(config, agent_name=config.agent_name, log_progress=True)
     bp_results = evaluate_agent(config, agent_name="bp", log_progress=True)
     bp_osd_results = evaluate_agent(config, agent_name="bp_osd", log_progress=True)
 
     print("\nFinal Evaluation Results:")
     for key, value in eval_agent_results.items():
-        print(f"{key}: {value:.4f}")
-
-    print("\nStatic Baseline Results:")
-    for key, value in static_agent_results.items():
         print(f"{key}: {value:.4f}")
 
     print("\nBP Baseline Results:")
@@ -224,7 +225,6 @@ def post_train_evaluation(config):
     # Plot results
     plot = plt.figure(figsize=(10, 6))
     plt.plot(list(eval_agent_results.keys()), list(eval_agent_results.values()), marker='o', label=f"{config.agent_name.upper()}")
-    plt.plot(list(static_agent_results.keys()), list(static_agent_results.values()), marker='o', label="Static Agent")
     plt.plot(list(bp_results.keys()), list(bp_results.values()), marker='o', label="BP")
     plt.plot(list(bp_osd_results.keys()), list(bp_osd_results.values()), marker='o', label="BP+OSD")
     plt.yscale('log')

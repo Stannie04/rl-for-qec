@@ -106,15 +106,15 @@ class GNNCritic(nn.Module):
         action_head_layers.append(nn.Linear(prev_dim, 1))
         self.action_head = nn.Sequential(*action_head_layers)
 
-        noop_head_layers = []
-        prev_dim = encoder_output_dim
-        for hidden_dim in config.hidden_layers_mlp:
-            noop_head_layers.append(nn.Linear(prev_dim, hidden_dim))
-            noop_head_layers.append(nn.ReLU())
-            prev_dim = hidden_dim
-        noop_head_layers.append(nn.Linear(prev_dim, 1))
-        self.no_op_head = nn.Sequential(*noop_head_layers)
-
+        if config.use_noop_head:
+            noop_head_layers = []
+            prev_dim = encoder_output_dim
+            for hidden_dim in config.hidden_layers_mlp:
+                noop_head_layers.append(nn.Linear(prev_dim, hidden_dim))
+                noop_head_layers.append(nn.ReLU())
+                prev_dim = hidden_dim
+            noop_head_layers.append(nn.Linear(prev_dim, 1))
+            self.no_op_head = nn.Sequential(*noop_head_layers)
 
 
     def forward(self, data, action=None):
@@ -131,7 +131,8 @@ class GNNCritic(nn.Module):
         q_values = self.action_head(q_input).squeeze(-1)
         q_values = q_values.view(graph_feat.size(0), -1)
 
-        noop_q = self.no_op_head(graph_feat)
+        if hasattr(self, "no_op_head"):
+            noop_q = self.no_op_head(graph_feat)
+            q_values = torch.cat([q_values, noop_q], dim=-1)
 
-        q_values = torch.cat([q_values, noop_q], dim=-1)
         return q_values
