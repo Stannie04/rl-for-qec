@@ -15,7 +15,7 @@ class QLDPCCode(gym.Env):
 
         self.n, self.k, self.d = config.n, config.k, config.d
         self.l, self.m = config.l, config.m
-        self.n_data, self.n_stabilizers = 2*self.l*self.m, self.l*self.m # NOTE: stabilizers are split evenly between X and Z, so total stabilizers is l*m, not 2*l*m
+        self.n_data, self.n_stabilizers = 2*self.l*self.m, self.l*self.m # NOTE: stabilizers are split evenly between X and Z, so total stabilizers is 2*l*m
         self.no_op_index = self.n_data  # Action index for "no operation"
 
         self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices(config.code_params)
@@ -392,14 +392,13 @@ class QLDPCCode(gym.Env):
         pos = nx.multipartite_layout(self.graph, subset_key="layer")
 
         # Separate node lists
-        qubits = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "qubit"]
-        x_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "x_check"]
-        z_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "z_check"]
-
+        qubits = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "qubit" and self.x_errors[int(n[1:])] == 1]
+        x_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "x_check" and self.data.x[self.node_to_index[n], 3] == 1]
+        z_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 1]
         qubit_colors = ["orange" if self.x_errors[int(n[1:])] == 1 else "black" for n in qubits]
-        x_check_colors = ["red" if self.data.x[self.node_to_index[n], 0] == 1 else "lightcoral" for n in
+        x_check_colors = ["red" if self.data.x[self.node_to_index[n], 3] == 1 else "lightcoral" for n in
                           x_checks]
-        z_check_colors = ["blue" if self.data.x[self.node_to_index[n], 0] == 1 else "lightblue" for n in
+        z_check_colors = ["blue" if self.data.x[self.node_to_index[n], 4] == 1 else "lightblue" for n in
                           z_checks]
 
         # Color edges based on whether they are connected to an error qubit or not
@@ -460,3 +459,63 @@ class QLDPCCode(gym.Env):
         plt.title("CSS Tanner Graph (Bicycle Code)")
 
         plt.show()
+
+
+    def number_of_overlapping_stabilizers(self, indices):
+        x_overlap = self.H_z[:, indices].sum(axis=1)
+
+        # Count the number of times 2 occurs in the array
+        num_x_overlaps_one = (x_overlap == 1).sum().item()
+        num_x_overlaps_two = (x_overlap == 2).sum().item()
+        return (num_x_overlaps_one, num_x_overlaps_two)
+
+
+    def get_subgraph_of_indices(self, indices):
+        # Return the subgraph of the Tanner graph containing only the specified qubit indices and their neighboring checks.
+        nodes_to_include = set()
+        for idx in indices:
+            qubit_node = f"q{idx}"
+            nodes_to_include.add(qubit_node)
+            neighbors = self.graph.neighbors(qubit_node)
+            nodes_to_include.update(neighbors)
+
+        # Filter on only q and z check nodes to simplify visualization
+        nodes_to_include = {n for n in nodes_to_include if self.graph.nodes[n]["node_type"] in ("qubit", "z_check")}
+
+        return self.graph.subgraph(nodes_to_include)
+
+
+    def render_subgraph(self, indices, overlap, mistakes, total):
+        subgraph = self.get_subgraph_of_indices(indices)
+
+        pos = nx.spring_layout(subgraph, seed=42)  # Use a fixed seed for consistent layouts across runs
+
+        plt.figure(figsize=(8, 6))
+        # nx.draw(subgraph, pos, with_labels=True, node_color="lightblue", edge_color="gray")
+        nx.draw_networkx_nodes(subgraph, pos,
+                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"],
+                               node_color="orange",
+                               node_shape="o",
+                               node_size=200,
+                               label="Data qubits")
+
+        nx.draw_networkx_nodes(subgraph, pos,
+                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 1],
+                               node_color="red",
+                               node_shape="s",
+                               node_size=300,
+                               label="X checks")
+
+        nx.draw_networkx_nodes(subgraph, pos,
+                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 0],
+                               node_color="lightcoral",
+                               node_shape="s",
+                               node_size=300,
+                               label="X checks (no syndrome)")
+
+        nx.draw_networkx_edges(subgraph, pos, edge_color="gray")
+
+
+        plt.title(f"Pattern {overlap} (Mistake frequency: {mistakes} / {total}, {100 * mistakes / total:.2f}%)")
+        plt.axis("off")
+        plt.savefig(f"results/overlap/{overlap}.png")

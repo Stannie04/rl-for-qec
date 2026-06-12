@@ -4,6 +4,7 @@ import os
 import numpy as np
 import torch
 from tqdm import tqdm
+from collections import Counter
 
 from src.environment import QLDPCEnv
 from src.agents import SACAgent, BPAgent, BPOSDAgent
@@ -48,12 +49,12 @@ def create_dataset_from_random_shots(config, num_samples, error_rate, noise_mode
 
     return shots
 
-def create_dataset_from_uniform_shots(config, num_samples_per_error, noise_model="bit_flip", save=False):
+def create_dataset_from_uniform_shots(config, num_samples_per_error, max_error, noise_model="bit_flip", save=False):
 
     print(f"Creating dataset of {num_samples_per_error} uniform random shots for code {config.code_name}")
-    shots = np.zeros((num_samples_per_error*4, 2, config.n), dtype=np.int8)
+    shots = np.zeros((num_samples_per_error * max_error, 2, config.n), dtype=np.int8)
 
-    for num_errors in tqdm(range(1, 5), desc="Generating uniform random shots", leave=False):
+    for num_errors in tqdm(range(1, max_error + 1), desc="Generating uniform random shots", leave=False):
         for i in range(num_samples_per_error):
             idx = (num_errors-1)*num_samples_per_error + i
             error_indices = np.random.choice(config.n, num_errors, replace=False)
@@ -102,6 +103,12 @@ def create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform",
             agent.actor.load_state_dict(checkpoint["actor"])
             agent.critic1.load_state_dict(checkpoint["critic1"])
             agent.critic2.load_state_dict(checkpoint["critic2"])
+        case "sac_finetuned":
+            agent = SACAgent(env, config)
+            checkpoint = torch.load(f"checkpoints/{config.agent_name}_{config.code_name}_finetuned.pt", map_location=config.device)
+            agent.actor.load_state_dict(checkpoint["actor"])
+            agent.critic1.load_state_dict(checkpoint["critic1"])
+            agent.critic2.load_state_dict(checkpoint["critic2"])
         case "bp": agent = BPAgent(env, config)
         case "bp_osd": agent = BPOSDAgent(env, config)
         case _: raise NotImplementedError
@@ -128,9 +135,9 @@ def create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform",
 
 
 def create_all_datasets(config):
-    # create_dataset_from_random_shots(config, num_samples=int(1e6), noise_model="bit_flip, save=True)
-    # create_dataset_from_nonzero_shots(config, num_samples=int(1e6), noise_model="bit_flip, save=True)
-    create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), noise_model="bit_flip", save=True)
+    # create_dataset_from_random_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_error_rate, save=True)
+    # create_dataset_from_nonzero_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_error_rate, save=True)
+    # create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), max_error=4, noise_model="bit_flip", save=True)
 
-    for agent_name in ["sac", "bp", "bp_osd"]:
+    for agent_name in config.moe_experts:
         create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform", noise_model="bit_flip", save=True)

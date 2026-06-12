@@ -1,9 +1,13 @@
+from collections import Counter
+
 from src.environment import QLDPCEnv
 import math
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from src.train_utils.datasets import load_shots
+from PIL import Image
+
 
 def probabilities_of_k_errors_per_shot(code):
     total_number_qubits = code.n_data
@@ -110,28 +114,85 @@ def analyze_datasets(config):
                     f"({100 * n_overlap / n_subset:6.2f}%)"
                 )
 
+def get_nonzero_overlap_distribution(config):
+    shots = load_shots(config, dataset_type="uniform", noise_model="bit_flip")
+    env = QLDPCEnv(config, shots)
+    all_overlaps = []
+    for shot in tqdm(shots, desc="Analyzing uniform shots", leave=False):
+        env.reset_with_error_pattern(shot[0], shot[1])
+        overlap = env.code.number_of_overlapping_stabilizers(np.array(np.where(shot[0] == 1)[0]))
+        all_overlaps.append(overlap)
 
-    # for agent_name, mistakes in [("SAC", sac_mistakes), ("BP", bp_mistakes), ("BP+OSD", bp_osd_mistakes)]:
-    #     if len(mistakes) == 0:
-    #         print(f"\n\n{agent_name} made no mistakes, skipping analysis.")
-    #         continue
-    #
-    #     values, counts = np.unique(mistakes[:, 0, :].sum(axis=-1), return_counts=True)
-    #     print(f"\n\n{agent_name} Mistakes Distribution:")
-    #     for v, c in zip(values, counts):
-    #         print(f"\t{v} errors: {c} mistakes in {random_shot_distribution[v]} samples ({c/random_shot_distribution[v]*100:.2f}%)")
-    #     print(f"\nTotal samples: {len(mistakes)}")
-    #     # Check if the other agents make the same mistakes
-    #     for other_agent_name, other_mistakes in [("SAC", sac_mistakes), ("BP", bp_mistakes), ("BP+OSD", bp_osd_mistakes)]:
-    #         if other_agent_name == agent_name:
-    #             continue
-    #         overlap = sum(any(np.array_equal(m, om) for om in other_mistakes) for m in mistakes)
-    #         print(f"\tOverlap with {other_agent_name}: {overlap} samples ({overlap/len(mistakes)*100:.2f}%)")
+    overlap_counts = Counter(all_overlaps)
 
+    print("\nOverlap distribution for uniform shots:")
+    for overlap, count in sorted(overlap_counts.items()):
+        print(f"  Overlap {overlap}: {count} samples")
+
+    return overlap_counts
+
+
+def get_mistake_distribution(config):
+
+    # First, get the distribution of overlaps for the shot dataset that the mistake set is based on
+    all_overlap_counts = get_nonzero_overlap_distribution(config)
+
+    shots = load_shots(config, dataset_type="mistakes", noise_model="bit_flip")
+    env = QLDPCEnv(config, shots)
+
+    all_mistake_overlaps = []
+    representative_shots = {}
+    for shot in tqdm(shots, desc="Updating graph for mistake shots", leave=False):
+        env.reset_with_error_pattern(shot[0], shot[1])
+        overlap = env.code.number_of_overlapping_stabilizers(np.array(np.where(shot[0] == 1)[0]))
+
+        if overlap not in all_mistake_overlaps:
+            print(f"New overlap value: {overlap}")
+            representative_shots[overlap] = shot
+
+        all_mistake_overlaps.append(overlap)
+
+
+    print("\nOverlap distribution for mistake shots:")
+    mistake_counts = Counter(all_mistake_overlaps)
+    for overlap, count in sorted(mistake_counts.items()):
+        print(f"  Overlap {overlap}: {count} samples")
+
+
+    for overlap, shot in representative_shots.items():
+        mistake_count = mistake_counts[overlap]
+        all_overlaps_count = all_overlap_counts[overlap]
+
+        env.reset_with_error_pattern(shot[0], shot[1])
+        env.code.render_subgraph(np.array(np.where(shot[0] == 1)[0]), overlap, mistake_count, all_overlaps_count)
+
+
+    # Combine overlap graphs in directory results/overlap into a single plot
+    images = []
+    for overlap in sorted(mistake_counts.keys()):
+        try:
+            img = Image.open(f"results/overlap/{overlap}.png")
+            images.append((overlap, img))
+        except FileNotFoundError:
+            print(f"Image for overlap {overlap} not found, skipping.")
+
+    image_size = images[0][1].size
+
+    cols, rows = 4, math.ceil(len(images) / 4)
+    canvas = Image.new("RGB", (cols * image_size[0], rows * image_size[1]), "white")
+
+    for i, img in enumerate(images):
+        x = (i % cols) * image_size[0]
+        y = (i // cols) * image_size[1]
+        canvas.paste(img[1], (x, y))
+
+    canvas.save("results/overlap/mistake_overlap_distribution.png")
+    canvas.show()
 
 def full_analysis(config):
     env = QLDPCEnv(config)
     code = env.code
     print(f"Code Name: {config.code_name}\n")
-    probabilities_of_k_errors_per_shot(code)
-    analyze_datasets(config)
+    # probabilities_of_k_errors_per_shot(code)
+    # analyze_datasets(config)
+    get_mistake_distribution(config)
