@@ -39,7 +39,7 @@ class QLDPCEnv(gym.Env):
 
     @property
     def observation(self):
-        self.code.update_graph()
+        self.code.update_graph(self.curriculum_error_rate)
         return self.code.data.clone()
 
 
@@ -75,7 +75,6 @@ class QLDPCEnv(gym.Env):
     def update_info(self):
         self.info = {
             "episode_steps": self.episode_steps,
-            "correct_actions": self.correct_actions,
             "repeated_actions": self.repeated_actions,
             "num_errors": self.code.num_x_errors,
             "num_syndromes": int(self.code.x_syndrome.sum() + self.code.z_syndrome.sum()),
@@ -84,7 +83,6 @@ class QLDPCEnv(gym.Env):
             "repeated_action": np.array_equal(self.last_action, self.last_action),
 
             "logs": {
-                    "Actions/Accuracy": np.mean(self.correct_actions[-100:]) if self.correct_actions else 0.0,
                     "Actions/Repeated Actions": np.mean(self.repeated_actions[-100:]) if self.repeated_actions else 0.0,
                     "Monitoring/Number of Errors": self.code.num_x_errors
                 }
@@ -96,12 +94,9 @@ class QLDPCEnv(gym.Env):
 
         for action in actions:
             action = int(action)
-            self.correct_actions.append(int(self._correct_action(action)))
-
             self.code.flip(action)
 
         self.update_info()
-
         reward = self.get_reward(actions)
 
         self.previous_num_errors = self.info["num_errors"]
@@ -139,10 +134,6 @@ class QLDPCEnv(gym.Env):
 
     def render(self, mode='human'):
         self.code.render(mode=mode)
-
-
-    def _correct_action(self, action):
-        return self.code.x_errors[action] == 1  # Correct if the flipped qubit had an error
 
 
     def _init_metrics_on_reset(self):

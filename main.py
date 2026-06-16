@@ -3,6 +3,11 @@ from src.train_utils import run_baselines, benchmark_env, render_example_environ
 from src.read_config import ConfigParser
 import argparse
 
+import torch
+if not torch.cuda.is_available():
+    print("\n", "="*80)
+    print("WARNING: CUDA is not available. Using CPU for training.")
+    print("="*80, "\n")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train RL agents for quantum error correction.")
@@ -10,6 +15,7 @@ def parse_args():
     parser.add_argument("-c", "--code", type=str, default="144_12_12_ldpc", help="Code configuration (e.g., 18_2_3_toric)")
     parser.add_argument("-e", "--experiment", type=str, default="train", help="Experiment type (e.g., train, eval, benchmark)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("-r", "--run_name", type=str, default=None, help="Name of run")
     return parser.parse_args()
 
 
@@ -32,6 +38,6 @@ if __name__ == '__main__':
 
     args = parse_args()
 
-    config = ConfigParser("configs", args.agent, args.code, verbose=args.verbose)
+    config = ConfigParser("configs", args.agent, args.code, run_name=args.run_name, verbose=args.verbose)
     experiment = select_experiment(args.experiment)
     experiment(config)

@@ -2,6 +2,9 @@ n_repetitions: 1
 num_timesteps: 5000
 max_episode_length: 10
 
+# Environment parameters
+noise_model: "bit_flip"
+
 # Evaluation parameters
 evaluate_during_training: False
 steps_between_evaluation: 100000

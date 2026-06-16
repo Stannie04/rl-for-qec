@@ -1,7 +1,7 @@
 from collections import deque
 import random
 import math
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,6 +10,50 @@ from torch_geometric.data import Data, Batch
 from torch.distributions.categorical import Categorical
 
 from .networks import GNNActor, GNNCritic
+
+
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, alpha=0.6, beta_start=0.4, beta_steps=100_000):
+        self.capacity = capacity
+        self.buffer = []
+        self.priorities = np.zeros(capacity, dtype=np.float32)
+        self.alpha = alpha          # priority exponent
+        self.beta = beta_start      # importance sampling exponent
+        self.beta_steps = beta_steps
+        self.pos = 0
+        self.step = 0
+
+    def push(self, state, action, reward, next_state, done):
+        max_priority = self.priorities.max() if self.buffer else 1.0
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+
+        for a in action:
+            self.buffer[self.pos] = (state, action, reward, next_state, done)
+            self.priorities[self.pos] = max_priority
+            self.pos = (self.pos + 1) % self.capacity
+
+    def sample(self, batch_size):
+        probs = self.priorities[:len(self.buffer)] ** self.alpha
+        probs /= probs.sum()
+        indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+
+        # Anneal beta toward 1.0 over training
+        beta = min(1.0, self.beta + self.step * (1.0 - self.beta) / self.beta_steps)
+        self.step += 1
+
+        weights = (len(self.buffer) * probs[indices]) ** (-beta)
+        weights /= weights.max()
+
+        batch = [self.buffer[i] for i in indices]
+        return batch, indices, torch.FloatTensor(weights)
+
+    def update_priorities(self, indices, td_errors):
+        for idx, err in zip(indices, td_errors):
+            self.priorities[idx] = abs(err) + 1e-6  # small constant avoids zero priority
+
+    def __len__(self):
+        return len(self.buffer)
 
 
 class ReplayBuffer:
@@ -25,8 +69,7 @@ class ReplayBuffer:
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
-        states, actions, rewards, next_states, dones = zip(*batch)
-        return states, actions, rewards, next_states, dones
+        return batch, None, None  # For compatibility with prioritized buffer
 
     def __len__(self):
         return len(self.buffer)
@@ -35,6 +78,10 @@ class ReplayBuffer:
 class SACAgent:
     def __init__(self, env, config):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.env = env
+
+        self.qubit_to_x = self.env.code.qubit_to_x
+        self.qubit_to_z = self.env.code.qubit_to_z
 
         self.discrete = config.discrete
 
@@ -53,12 +100,13 @@ class SACAgent:
         self.critic1_opt = torch.optim.Adam(self.critic1.parameters(), lr=config.critic_learning_rate)
         self.critic2_opt = torch.optim.Adam(self.critic2.parameters(), lr=config.critic_learning_rate)
 
-        self.replay_buffer = ReplayBuffer(capacity=config.replay_buffer_capacity)
+        self.replay_buffer = ReplayBuffer(capacity=config.replay_buffer_capacity) if not config.use_per else PrioritizedReplayBuffer(capacity=config.replay_buffer_capacity)
         self.batch_size = config.batch_size
 
         self.alpha = config.initial_alpha
         self.log_alpha = torch.tensor(math.log(config.initial_alpha), requires_grad=True, device=self.device)
         self.alpha_opt = torch.optim.Adam([self.log_alpha], lr=config.alpha_learning_rate)
+
         self.target_entropy = -math.log(1.0 / env.code.n_data + 1) * 0.98
 
         self.gamma = config.gamma
@@ -79,7 +127,6 @@ class SACAgent:
                         action = probs.argmax(dim=-1)
                 else:
                     action = Categorical(probs).sample()
-
             return action, probs
 
         else:
@@ -90,7 +137,8 @@ class SACAgent:
         if len(self.replay_buffer) < self.batch_size:
             return {}  # Not enough data to train
 
-        state, action, reward, next_state, done = self.replay_buffer.sample(self.batch_size)
+        batch, indices, weights = self.replay_buffer.sample(self.batch_size)
+        state, action, reward, next_state, done = zip(*batch)
 
         state_batch = Batch.from_data_list(state).to(self.device)
         next_state_batch = Batch.from_data_list(next_state).to(self.device)
@@ -107,11 +155,14 @@ class SACAgent:
             q_target = reward_batch + self.gamma * (1 - done_batch) * next_v
             q_target = torch.clamp(q_target, -10.0, 10.0)
 
-        q1_all = self.critic1(state_batch, action_batch)
-        q2_all = self.critic2(state_batch, action_batch)
+        q1 = self.critic1(state_batch, action_batch)
+        q2 = self.critic2(state_batch, action_batch)
 
-        q1 = q1_all.gather(1, action_batch.long().unsqueeze(1))
-        q2 = q2_all.gather(1, action_batch.long().unsqueeze(1))
+        if isinstance(self.replay_buffer, PrioritizedReplayBuffer):
+            td_error1 = (q1 - q_target).abs().detach().squeeze(1)
+            td_error2 = (q2 - q_target).abs().detach().squeeze(1)
+            td_errors = ((td_error1 + td_error2) / 2).cpu().numpy()
+            self.replay_buffer.update_priorities(indices, td_errors)
 
         q1_loss = F.mse_loss(q1, q_target)
         q2_loss = F.mse_loss(q2, q_target)
@@ -129,8 +180,8 @@ class SACAgent:
 
         logits, log_probs, probs = self.actor(state_batch)
 
-        q1_new = self.critic1(state_batch, logits)
-        q2_new = self.critic2(state_batch, logits)
+        q1_new = self.critic1(state_batch)
+        q2_new = self.critic2(state_batch)
         actor_loss = (probs * (self.alpha * log_probs - torch.min(q1_new, q2_new))).sum(dim=1).mean()
 
         self.actor_opt.zero_grad()
