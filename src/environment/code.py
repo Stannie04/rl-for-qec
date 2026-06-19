@@ -515,10 +515,25 @@ class QLDPCCode(gym.Env):
             error_indices = torch.where(self.x_errors == 1)[0].tolist()
             subgraph = self.get_subgraph_of_indices(error_indices)
 
+        qubit_labels = {
+            n: str(int(n[1:]))  # "q17" -> "17"
+            for n in subgraph.nodes
+            if subgraph.nodes[n]["node_type"] == "qubit"
+        }
+
+
+
         pos = nx.spring_layout(subgraph, seed=42)  # Use a fixed seed for consistent layouts across runs
 
         fig = plt.figure(figsize=(8, 6))
         # nx.draw(subgraph, pos, with_labels=True, node_color="lightblue", edge_color="gray")
+        nx.draw_networkx_labels(
+            subgraph,
+            pos,
+            labels=qubit_labels,
+            font_size=8
+        )
+
         nx.draw_networkx_nodes(subgraph, pos,
                                nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"],
                                node_color="orange",

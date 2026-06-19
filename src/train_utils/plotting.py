@@ -103,7 +103,8 @@ def render_mistakes(config):
         # Evaluate the agent on this mistake
         error_pred = agent.select_action(obs, evaluate=True)[0]
         print(f"Action: {error_pred}")
-        env.code.render_subgraph()
-        env.step(error_pred)
-        env.code.render_subgraph()
+        if len(error_pred) > 0:
+            env.code.render_subgraph()
+            env.step(error_pred)
+            env.code.render_subgraph()
 
