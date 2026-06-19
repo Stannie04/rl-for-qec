@@ -6,6 +6,8 @@ from torch_geometric.data import Data, HeteroData
 import torch
 import galois
 from src.read_config import ConfigParser
+from PIL import Image
+import io
 
 
 class QLDPCCode(gym.Env):
@@ -34,9 +36,17 @@ class QLDPCCode(gym.Env):
         self.num_x_errors, self.num_z_errors = 0, 0
 
         self.logical_x, self.logical_x_T, self.logical_z, self.logical_z_T = self._get_logical_operators()
+        self.qubit_to_x, self.qubit_to_z = self._get_connected_checks()
 
         if validate:
             self._assert_valid_code()
+
+
+    def get_logical_state(self):
+        logical_x_state = (self.x_errors.float().unsqueeze(0) @ self.logical_z_T) % 2
+        logical_z_state = (self.z_errors.float().unsqueeze(0) @ self.logical_x_T) % 2
+
+        return logical_x_state, logical_z_state
 
 
     def has_logical_error(self) -> torch.Tensor:
@@ -52,19 +62,19 @@ class QLDPCCode(gym.Env):
 
     def reset_syndrome(self) -> None:
 
-        # self.x_syndrome = (self.H_x @ self.z_errors) % 2
-        # self.z_syndrome = (self.H_z @ self.x_errors) % 2
         self.x_syndrome = ((self.H_x.float() @ self.z_errors.float()) % 2).long()
         self.z_syndrome = ((self.H_z.float() @ self.x_errors.float()) % 2).long()
 
 
-    def update_graph(self) -> None:
+    def update_graph(self, error_rate) -> None:
         # Graph node features are structured as follows:
         # [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome]
+        er = torch.tensor(error_rate, dtype=torch.float32, device=self.data.x.device)
+        llr = torch.log1p(-er + 1e-10) - torch.log(er + 1e-10)
+        self.data.x[self.q_idx, 5] = llr
 
         self.data.x[self.x_idx, 3] = self.x_syndrome.float()
         self.data.x[self.z_idx, 4] = self.z_syndrome.float()
-
 
     def flip(self, qubit_index, error_type=1) -> None:
         # error_type = 1: X error
@@ -76,12 +86,12 @@ class QLDPCCode(gym.Env):
         if error_type != 2:
             self.num_x_errors += 1 - 2 * self.x_errors[qubit_index]
             self.x_errors[qubit_index] ^= 1
-            self.x_syndrome ^= self.H_x[:, qubit_index].flatten()
+            self.z_syndrome ^= self.H_z[:, qubit_index].flatten()
 
         if error_type != 1:
             self.num_z_errors += 1 - 2 * self.z_errors[qubit_index]
             self.z_errors[qubit_index] ^= 1
-            self.z_syndrome ^= self.H_z[:, qubit_index].flatten()
+            self.x_syndrome ^= self.H_x[:, qubit_index].flatten()
 
 
     def flip_randomly(self, error_rate) -> None:
@@ -118,6 +128,19 @@ class QLDPCCode(gym.Env):
     # Private helper functions for initializing the code structure, calculating logical operators, and rendering the graph.
     #
 
+    def _get_connected_checks(self):
+        qubit_to_x = {}
+        qubit_to_z = {}
+
+        for q in range(self.n_data):
+            x_checks = torch.where(self.H_x[:, q] == 1)[0].cpu().numpy()
+            z_checks = torch.where(self.H_z[:, q] == 1)[0].cpu().numpy()
+            qubit_to_x[q] = self.x_idx[x_checks]
+            qubit_to_z[q] = self.z_idx[z_checks]
+
+        return qubit_to_x, qubit_to_z
+
+
     def _get_logical_operators(self):
         # The logical operators can be derived from parity check matrices as
         # a basis for the kernel of H_x and H_z.
@@ -127,7 +150,7 @@ class QLDPCCode(gym.Env):
         def quotient_basis(null_space, row_space):
             """
             Return a basis for null_space modulo row_space.
-            Keeps nullspace vectors that are independent from the stabilizers.
+            Keeps nullspace vectors that are independent of the stabilizers.
             """
             GF2 = galois.GF(2)
             null_space = GF2(np.atleast_2d(np.array(null_space, dtype=int)))
@@ -232,19 +255,18 @@ class QLDPCCode(gym.Env):
         node_list = list(G.nodes)
         node_to_index = {n: i for i, n in enumerate(node_list)}
 
-        # One-hot encode node types, plus additional feature specific to qubit type
+        # One-hot encode node types, plus additional feature specific to qubit type.
+        # Node features are structured as follows:
+        # [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome, LLR]
         x = []
         for n in node_list:
             node_type = G.nodes[n]["node_type"]
             if node_type == "qubit":
-                # x.append([1, 0, 0, 0, self.error_rate])
-                x.append([1, 0, 0, 0, 0])
+                x.append([1, 0, 0, 0, 0, 0])
             elif node_type == "x_check":
-                # x.append([0, 1, 0, 0, 0])  # Final feature encodes the measurement outcome, which is 0 for all nodes at initialization (no errors)
-                x.append([0, 1, 0, 0, 0])
+                x.append([0, 1, 0, 0, 0, 0])
             elif node_type == "z_check":
-                # x.append([0, 0, 1, 0, 0])  # Final feature encodes the measurement outcome, which is 0 for all nodes at initialization (no errors)
-                x.append([0, 0, 1, 0, 0])
+                x.append([0, 0, 1, 0, 0, 0])
             else:
                 raise ValueError("Unknown node type")
         x = torch.tensor(x, dtype=torch.float32, device=self.device)
@@ -485,12 +507,17 @@ class QLDPCCode(gym.Env):
         return self.graph.subgraph(nodes_to_include)
 
 
-    def render_subgraph(self, indices, overlap, mistakes, total):
-        subgraph = self.get_subgraph_of_indices(indices)
+    def render_subgraph(self, indices=None, overlap=None, mistakes=None, total=None):
+
+        if indices is not None:
+            subgraph = self.get_subgraph_of_indices(indices)
+        else:
+            error_indices = torch.where(self.x_errors == 1)[0].tolist()
+            subgraph = self.get_subgraph_of_indices(error_indices)
 
         pos = nx.spring_layout(subgraph, seed=42)  # Use a fixed seed for consistent layouts across runs
 
-        plt.figure(figsize=(8, 6))
+        fig = plt.figure(figsize=(8, 6))
         # nx.draw(subgraph, pos, with_labels=True, node_color="lightblue", edge_color="gray")
         nx.draw_networkx_nodes(subgraph, pos,
                                nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"],
@@ -515,7 +542,18 @@ class QLDPCCode(gym.Env):
 
         nx.draw_networkx_edges(subgraph, pos, edge_color="gray")
 
+        if overlap is not None and mistakes is not None and total is not None:
+            plt.title(f"Pattern {overlap} (Mistake frequency: {mistakes} / {total}, {100 * mistakes / total:.2f}%)")
 
-        plt.title(f"Pattern {overlap} (Mistake frequency: {mistakes} / {total}, {100 * mistakes / total:.2f}%)")
         plt.axis("off")
-        plt.savefig(f"results/overlap/{overlap}.png")
+
+        plt.show()
+
+        # buf = io.BytesIO()
+        # plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
+        # plt.close(fig)
+        # buf.seek(0)
+        #
+        # img = Image.open(buf).convert("RGB")
+        # return img
+
