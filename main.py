@@ -1,5 +1,5 @@
-from src.experiments import train, optimize_hyperparameters, train_moe, finetune
-from src.train_utils import run_baselines, benchmark_env, render_example_environment, post_train_evaluation, full_analysis, create_all_datasets
+from src.experiments import train, optimize_hyperparameters, train_moe, finetune, pretrain_encoder
+from src.train_utils import run_baselines, benchmark_env, render_example_environment, post_train_evaluation, full_analysis, create_all_datasets, render_mistakes
 from src.read_config import ConfigParser
 import argparse
 
@@ -26,11 +26,12 @@ def select_experiment(experiment_name):
         case "baselines": return run_baselines
         case "benchmark": return benchmark_env
         case "hpo": return optimize_hyperparameters
-        case "render": return render_example_environment
+        case "render": return render_mistakes
         case "evaluate": return post_train_evaluation
         case "analysis": return full_analysis
         case "dataset": return create_all_datasets
         case "finetune": return finetune
+        case "pretrain": return pretrain_encoder
         case _: raise ValueError(f"Unknown experiment: {experiment_name}")
 
 

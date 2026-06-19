@@ -5,17 +5,18 @@ import os
 from wandb import Histogram
 from tqdm import tqdm
 from src.environment import QLDPCEnv
-from src.agents import DQNAgent, SACAgent, BPAgent, BPOSDAgent
-from src.train_utils import evaluate_agent, CurriculumScheduler, load_shots, create_dataset_from_nonzero_shots, create_dataset_from_curriculum
+from src.agents import DQNAgent, SACAgent, BPAgent, BPOSDAgent, NeuralBPPretrainer, NeuralBPEncoder
+from src.train_utils import evaluate_agent, CurriculumScheduler, load_shots, create_dataset_from_nonzero_shots, create_dataset_from_curriculum, create_dataset_from_pretrained_encoder_mistakes
 import torch
 
 def get_reset_logs(episode_reward, info, start_errors):
     return {
-        "Train/Episode Reward": episode_reward.item(),
+        "Train/Episode Reward": episode_reward,
         "Train/Episode Steps": info["episode_steps"],
         "Decoding Ability/Errors at End of Episode": info["num_errors"],
         "Decoding Ability/Errors at Start of Episode": start_errors,
-        "Decoding Ability/Errors decoded" : start_errors - info["num_errors"]
+        "Decoding Ability/Errors decoded" : start_errors - info["num_errors"],
+        "Decoding Ability/Percentage of Errors Decoded": (start_errors - info["num_errors"]) / max(1, start_errors),
     }
 
 
@@ -43,7 +44,7 @@ def single_agent_training_loop(env, agent, config, checkpoint_dir=None):
     for step, _ in enumerate(tqdm(env.shots)):
         train_step_logs, done_logs, eval_logs = {}, {}, {}
 
-        action, probs = agent.select_action(obs, evalate=True)
+        action, probs = agent.select_action(obs)
         next_obs, reward, terminated, truncated, info = env.step(action)
         agent.replay_buffer.push(obs, action, reward, next_obs, (terminated or truncated))
         obs = next_obs
@@ -107,23 +108,51 @@ def train(config):
 
 def finetune(config):
 
-    if config.wandb_logging:
-        wandb.init(project=config.wandb_project, name=config.wandb_run_name, tags=[f"{config.agent_name}", f"{config.code_name}"], config=config.__dict__, dir="/tmp/wandb")
-
-    shots = load_shots(config, dataset_type="mistakes")
+    shots = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name="bp", num_epochs=100)
     env = QLDPCEnv(config, shots)
-    agent = SACAgent(env, config)
-    checkpoint = torch.load(f"checkpoints/{config.agent_name}_{config.code_name}.pt", map_location=config.device)
-    agent.actor.load_state_dict(checkpoint["actor"])
-    agent.critic1.load_state_dict(checkpoint["critic1"])
-    agent.critic2.load_state_dict(checkpoint["critic2"])
 
-    for i in range(config.n_repetitions):
-        print(f"Starting training run {i+1}/{config.n_repetitions}")
-        single_agent_training_loop(env, agent, config)
+    encoder = NeuralBPEncoder(config, env)
+    agent = NeuralBPPretrainer(encoder, config, env.code.n_data).to(config.device)
+    checkpoint = torch.load(f"checkpoints/encoder_early.pt", map_location=config.device)
+    agent.encoder.load_state_dict(checkpoint["encoder"])
+    agent.output_layer.load_state_dict(checkpoint["output_layer"])
 
-    if config.wandb_logging:
-        wandb.finish()
+    opt = torch.optim.Adam(agent.parameters(), lr=config.encoder_learning_rate)
+    pbar = tqdm(env.shots)
 
+    for _ in pbar:
+        obs, info = env.reset()
+        error_true = env.code.x_errors.float()
+        error_pred = agent(obs)
 
-    agent.save(f"checkpoints/{config.agent_name}_{config.code_name}_finetuned.pt")
+        loss = torch.nn.functional.binary_cross_entropy(error_pred, error_true)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+
+        pbar.set_description(f"loss: {loss.item():.4f}")
+
+    agent.save(f"checkpoints/encoder_early_finetuned.pt")
+
+    create_dataset_from_pretrained_encoder_mistakes(config, agent, save=True)
+
+    # if config.wandb_logging:
+    #     wandb.init(project=config.wandb_project, name=config.wandb_run_name, tags=[f"{config.agent_name}", f"{config.code_name}"], config=config.__dict__, dir="/tmp/wandb")
+    #
+    # shots = load_shots(config, dataset_type="mistakes")
+    # env = QLDPCEnv(config, shots)
+    # agent = SACAgent(env, config)
+    # checkpoint = torch.load(f"checkpoints/{config.agent_name}_{config.code_name}.pt", map_location=config.device)
+    # agent.actor.load_state_dict(checkpoint["actor"])
+    # agent.critic1.load_state_dict(checkpoint["critic1"])
+    # agent.critic2.load_state_dict(checkpoint["critic2"])
+    #
+    # for i in range(config.n_repetitions):
+    #     print(f"Starting training run {i+1}/{config.n_repetitions}")
+    #     single_agent_training_loop(env, agent, config)
+    #
+    # if config.wandb_logging:
+    #     wandb.finish()
+    #
+    #
+    # agent.save(f"checkpoints/{config.agent_name}_{config.code_name}_finetuned.pt")

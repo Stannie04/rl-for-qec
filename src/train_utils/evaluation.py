@@ -40,22 +40,6 @@ def get_agent(config, env, agent_name):
 
 
 
-def render_example_environment(config):
-    env = QLDPCEnv(config)
-
-    for l in env.code.logical_x:
-        for j in torch.argwhere(l == 1).flatten():
-            env.code.flip(j)
-            env.code.update_graph(env.curriculum_error_rate)
-
-            print(f"Logical error: {env.code.has_logical_error()}")
-            print(f"Error free: {env.code.is_error_free()}\n")
-
-            env.render()
-
-        env.reset()
-
-
 def render_evaluation_episode(config, model_checkpoint, max_episode_steps=100):
 
     env = QLDPCEnv(config)
@@ -190,7 +174,7 @@ def evaluate_agent(config: ConfigParser, step, best_model_ler, agent_name=None, 
             obs, reward, terminated, truncated, info = eval_env.step(action)
             done = terminated or truncated
             episode_length += 1
-            episode_return += reward.item()
+            episode_return += reward
 
         if info["error_free"]:
             successes += 1

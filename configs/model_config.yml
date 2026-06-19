@@ -56,10 +56,11 @@ sac:
 
 moe:
   moe_experts:
+#    - pretrained_encoder
     - sac
-    - sac_finetuned
     - bp
     - bp_osd
+    - pretrained_encoder
 
   moe_hidden_layers_gnn:
     - 32
@@ -72,3 +73,7 @@ moe:
 
   moe_learning_rate: 0.0001
   latency_penalty_factor: 10 # 0 for no penalty
+
+encoder:
+  encoder_learning_rate: 0.0001
+  encoder_hidden_dim: 128

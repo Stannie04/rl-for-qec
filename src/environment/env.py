@@ -26,6 +26,7 @@ class QLDPCEnv(gym.Env):
         self.previous_num_errors = 0
         self.previous_num_syndromes = 0
         self.initial_errors = 0
+        self.initial_syndromes = 0
         self.last_action = None
         self.correct_actions = []
         self.repeated_actions = []
@@ -46,18 +47,22 @@ class QLDPCEnv(gym.Env):
     def get_reward(self, actions):
         reward = 0.0
 
-        reward += -1.0 if self.info["repeated_action"] else 0.0
+        reward += -0.3 if self.info["repeated_action"] else 0.0
 
-        reward += 0.25 * (self.previous_num_syndromes - self.info["num_syndromes"])
-        reward += 0.50 * (self.previous_num_errors - self.info["num_errors"]) / max(1, self.initial_errors)
+        syndrome_delta = self.previous_num_syndromes - self.info["num_syndromes"]
+        reward += 0.5 * syndrome_delta / max(1, self.initial_syndromes)
 
-        reward -= 0.01  # step penalty
+        # reward -= 0.1 * self.info["num_syndromes"] / max(1, self.initial_syndromes)
+        # reward += 0.50 * (self.previous_num_errors - self.info["num_errors"]) / max(1, self.initial_errors)
+
+        # reward -= 0.01  # step penalty
 
         if self.info["error_free"]:
-            reward += 2.0
+            efficiency = max(0.0, 1.0 - self.episode_steps / max(1, 2 * self.initial_errors))
+            reward += 2.0 + efficiency
 
         if self.info["logical_error"]:
-            reward -= 2.0
+            reward -= 3.0
 
         return reward
 
@@ -92,9 +97,13 @@ class QLDPCEnv(gym.Env):
     def step(self, action):
         actions = action.cpu().numpy()
 
+        total_steps = 0
         for action in actions:
             action = int(action)
             self.code.flip(action)
+            total_steps += 1
+
+        self.episode_steps += max(1, total_steps)
 
         self.update_info()
         reward = self.get_reward(actions)
@@ -104,7 +113,6 @@ class QLDPCEnv(gym.Env):
         self.repeated_actions.append(self.info["repeated_action"])
         self.last_action = actions
 
-        self.episode_steps += 1
         return self.observation, reward, self.terminated, self.truncated, self.info
 
 
@@ -140,6 +148,7 @@ class QLDPCEnv(gym.Env):
         self.update_info()
         self.previous_num_syndromes = self.info["num_syndromes"]
         self.initial_errors = self.info["num_errors"]
+        self.initial_syndromes = self.info["num_syndromes"]
         self.previous_num_errors = self.initial_errors
         self.episode_steps = 0
         self.last_action = None

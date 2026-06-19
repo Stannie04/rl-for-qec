@@ -1,5 +1,6 @@
 n_repetitions: 1
-num_timesteps: 5000
+num_timesteps: 10000
+num_pretrain_timesteps: 10000
 max_episode_length: 10
 
 # Environment parameters
