@@ -139,12 +139,11 @@ class NeuralBPEncoder(nn.Module):
         return x
 
 class NeuralBPPretrainer(nn.Module):
-    def __init__(self, encoder, config, num_qubits):
+    def __init__(self, encoder, config):
         super().__init__()
         self.config = config
         self.encoder = encoder
         self.output_layer = nn.Linear(config.encoder_hidden_dim, 1)
-        self.num_qubits = num_qubits
 
     def forward(self, data):
         x = self.encoder(data)

@@ -15,8 +15,14 @@ class BPAgent:
     def select_action(self, observation, evaluate=False):
         # Use belief propagation to decode the syndrome and determine the error
 
-        x_error = self.bp_x.decode(self.env.code.x_syndrome.cpu().numpy())
-        z_error = self.bp_z.decode(self.env.code.z_syndrome.cpu().numpy())
+        # x_syndrome = observation[self.env.code.x_idx, 3].cpu().numpy()
+        # z_syndrome = observation[self.env.code.z_idx, 3].cpu().numpy()
+
+        x_syndrome = self.env.code.x_syndrome.cpu().numpy()
+        z_syndrome = self.env.code.z_syndrome.cpu().numpy()
+
+        x_error = self.bp_x.decode(x_syndrome)
+        z_error = self.bp_z.decode(z_syndrome)
 
         x_error_index = np.argwhere(x_error == 1).flatten()
         z_error_index = np.argwhere(z_error == 1).flatten()

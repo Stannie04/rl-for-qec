@@ -483,7 +483,11 @@ class QLDPCCode(gym.Env):
         plt.show()
 
 
-    def number_of_overlapping_stabilizers(self, indices):
+    def number_of_overlapping_stabilizers(self, indices=None):
+
+        if indices is None:
+            indices = torch.where(self.x_errors == 1)[0].tolist()
+
         x_overlap = self.H_z[:, indices].sum(axis=1)
 
         # Count the number of times 2 occurs in the array
@@ -507,7 +511,7 @@ class QLDPCCode(gym.Env):
         return self.graph.subgraph(nodes_to_include)
 
 
-    def render_subgraph(self, indices=None, overlap=None, mistakes=None, total=None):
+    def render_subgraph(self, indices=None, overlap=None, mistakes=None, total=None, with_labels=False):
 
         if indices is not None:
             subgraph = self.get_subgraph_of_indices(indices)
@@ -527,12 +531,14 @@ class QLDPCCode(gym.Env):
 
         fig = plt.figure(figsize=(8, 6))
         # nx.draw(subgraph, pos, with_labels=True, node_color="lightblue", edge_color="gray")
-        nx.draw_networkx_labels(
-            subgraph,
-            pos,
-            labels=qubit_labels,
-            font_size=8
-        )
+
+        if with_labels:
+            nx.draw_networkx_labels(
+                subgraph,
+                pos,
+                labels=qubit_labels,
+                font_size=8
+            )
 
         nx.draw_networkx_nodes(subgraph, pos,
                                nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"],
@@ -562,13 +568,13 @@ class QLDPCCode(gym.Env):
 
         plt.axis("off")
 
-        plt.show()
+        # plt.show()
 
-        # buf = io.BytesIO()
-        # plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
-        # plt.close(fig)
-        # buf.seek(0)
-        #
-        # img = Image.open(buf).convert("RGB")
-        # return img
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
+        plt.close(fig)
+        buf.seek(0)
+
+        img = Image.open(buf).convert("RGB")
+        return img
 

@@ -5,6 +5,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from collections import Counter
+from itertools import combinations
+from math import comb
 
 from src.environment import QLDPCEnv
 from src.agents import SACAgent, BPAgent, BPOSDAgent
@@ -16,8 +18,10 @@ def load_shots(config, dataset_type="random", noise_model="bit_flip", agent_name
         case "random": shots = np.load(f"datasets/{config.code_name}/random_{noise_model}.npy", allow_pickle=True)
         case "uniform": shots = np.load(f"datasets/{config.code_name}/uniform_{noise_model}.npy", allow_pickle=True)
         case "nonzero": shots = np.load(f"datasets/{config.code_name}/nonzero_{noise_model}.npy", allow_pickle=True)
+        case "all": shots = np.load(f"datasets/{config.code_name}/all_{noise_model}.npy", allow_pickle=True)
+        case "moe": shots = np.load(f"datasets/{config.code_name}/moe_{noise_model}.npy", allow_pickle=True)
         case "mistakes":
-            shots = np.load(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}.npy", allow_pickle=True)
+            shots = np.load(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}_all.npy", allow_pickle=True)
 
             # If num_epochs is specified, repeat the dataset to match the number of epochs
             # Shape of shots is (num_samples * num_epochs, 2, n)
@@ -34,9 +38,24 @@ def load_shots(config, dataset_type="random", noise_model="bit_flip", agent_name
     return shots
 
 
+def create_dataset_from_moe_shots(config, noise_model="bit_flip", save=False):
+    hard_shots = load_shots(config, dataset_type="mistakes", noise_model=noise_model, agent_name="bp")
+
+    # Note that this does also sample some hard shots, though the vast majority will be easy shots. The small imbalance this creates is not a problem.
+    easy_shots = create_dataset_from_uniform_shots(config, num_samples_per_error=int(len(hard_shots)/4), max_error=4, noise_model="bit_flip", save=False)
+
+    all_shots = np.concatenate((hard_shots, easy_shots), axis=0)
+    np.random.shuffle(all_shots)
+
+    if save:
+        os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/moe_{noise_model}.npy", all_shots)
+
+    return all_shots
+
+
 def create_dataset_from_curriculum(config, num_samples, noise_model="bit_flip", with_mistakes=False, save=False):
     """"Dataset consisting of random nonzero shots, with error rates increasing order to match the curriculum used during training."""
-    print(f"Creating dataset of {num_samples} random shots in curriculum for code {config.code_name}")
 
     curriculum = CurriculumScheduler(config)
     error_rates = curriculum.error_rates_for_steps(range(num_samples))
@@ -70,7 +89,6 @@ def create_dataset_from_curriculum(config, num_samples, noise_model="bit_flip", 
 
 def create_dataset_from_random_shots(config, num_samples, error_rate, noise_model="bit_flip", save=False):
 
-    print(f"Creating dataset of {num_samples} random shots for code {config.code_name}")
     physical_error_rate = error_rate / 2 if noise_model == "depolarizing" else error_rate
 
     shots = np.zeros((num_samples, 2, config.n), dtype=np.int8)
@@ -87,7 +105,6 @@ def create_dataset_from_random_shots(config, num_samples, error_rate, noise_mode
 
 def create_dataset_from_uniform_shots(config, num_samples_per_error, max_error, noise_model="bit_flip", save=False):
 
-    print(f"Creating dataset of {num_samples_per_error} uniform random shots for code {config.code_name}")
     shots = np.zeros((num_samples_per_error * max_error, 2, config.n), dtype=np.int8)
 
     for num_errors in tqdm(range(1, max_error + 1), desc="Generating uniform random shots", leave=False):
@@ -108,8 +125,6 @@ def create_dataset_from_uniform_shots(config, num_samples_per_error, max_error, 
 
 
 def create_dataset_from_nonzero_shots(config, num_samples, error_rate, noise_model="bit_flip", save=False):
-
-    print(f"Creating dataset of {num_samples} nonzero random shots for code {config.code_name}")
 
     physical_error_rate = error_rate / 2 if noise_model == "depolarizing" else error_rate
     error_types = [0, 1] if noise_model == "depolarizing" else [0]
@@ -172,7 +187,7 @@ def create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform",
 
     if save:
         os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
-        np.save(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}.npy", np.array(dataset))
+        np.save(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}_{shot_type}.npy", np.array(dataset))
 
 
 def create_dataset_from_pretrained_encoder_mistakes(config, model, shot_type="uniform", noise_model="bit_flip", save=False):
@@ -201,10 +216,31 @@ def create_dataset_from_pretrained_encoder_mistakes(config, model, shot_type="un
         np.save(f"datasets/{config.code_name}/mistakes_finetuned_encoder_early_{noise_model}.npy", np.array(dataset))
 
 
+def create_dataset_from_all_permutations(config, noise_model="bit_flip", save=False):
+    num_errors = [3, 4]
+    num_samples = sum(comb(config.n, weight) for weight in num_errors)
+
+    print(f"Creating dataset of all {num_samples} permutations in {config.code_name}")
+    shots = np.zeros((num_samples, 2, config.n), dtype=np.int8)
+
+    i = 0
+    with tqdm(total=num_samples, leave=False) as pbar:
+        for weight in num_errors:
+            for error_indices in combinations(range(config.n), weight):
+                shots[i, 0, list(error_indices)] = 1
+                i += 1
+                pbar.update(1)
+
+    if save:
+        os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/all_{noise_model}.npy", shots)
+
 def create_all_datasets(config):
     # create_dataset_from_random_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_end_error_rate, save=True)
     # create_dataset_from_nonzero_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_end_error_rate, save=True)
     # create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), max_error=4, noise_model="bit_flip", save=True)
-
-    for agent_name in config.moe_experts:
-        create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform", noise_model="bit_flip", save=True)
+    # create_dataset_from_all_permutations(config, noise_model="bit_flip", save=True)
+    create_dataset_from_moe_shots(config, save=True)
+    #
+    # for agent_name in config.moe_experts:
+    #     create_dataset_from_expert_mistakes(config, agent_name, shot_type="all", noise_model="bit_flip", save=True)

@@ -163,7 +163,7 @@ def analyze_datasets(config):
 
 
 def get_nonzero_overlap_distribution(config):
-    shots = load_shots(config, dataset_type="uniform", noise_model="bit_flip")
+    shots = load_shots(config, dataset_type="all", noise_model="bit_flip")
     env = QLDPCEnv(config, shots)
 
     H_z = env.code.H_z.cpu().numpy()
@@ -262,10 +262,43 @@ def get_mistake_distribution(config):
         canvas.show()
 
 
+def get_absolute_error_rate(config):
+    mistakes = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name="bp")
+
+    mistake_distribution = {}
+    for shot in tqdm(mistakes, leave=False):
+        num_errors = shot[0].sum()
+        mistake_distribution[num_errors] = mistake_distribution.get(num_errors, 0) + 1
+
+    print("\nShot Distribution:")
+    for num_errors, count in sorted(mistake_distribution.items()):
+        print(f"  {num_errors} errors: {count} samples")
+
+    num_qubits = config.n
+    for error_rate in [0.005, 0.01, 0.03, 0.05]:
+
+        depolarizing_error_rate = error_rate / 3
+
+        total_probability = 0.0
+        depolarizing_probability = 0.0
+
+        success_rate = 1.0 - error_rate
+        success_rate_depolarizing = 1.0 - depolarizing_error_rate
+
+        for num_errors, num_samples in mistake_distribution.items():
+            num_successes = num_qubits - num_errors
+            total_probability += ((error_rate ** num_errors) * (success_rate ** num_successes)) * num_samples
+            depolarizing_probability += (depolarizing_error_rate ** num_errors) * (success_rate_depolarizing ** num_successes) * num_samples
+
+        print(f"p = {error_rate}: LER = {total_probability:e}, Depolarizing LER = {depolarizing_probability:e}")
+
+
+
 def full_analysis(config):
     env = QLDPCEnv(config)
     code = env.code
     print(f"Code Name: {config.code_name}\n")
     # probabilities_of_k_errors_per_shot(code)
-    analyze_datasets(config)
-    get_mistake_distribution(config)
+    # analyze_datasets(config)
+    # get_mistake_distribution(config)
+    get_absolute_error_rate(config)
