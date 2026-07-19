@@ -24,20 +24,25 @@ dqn:
 sac:
   batch_size: 64
   replay_buffer_capacity: 500000
-  initial_alpha: 0.5
+  initial_alpha: 0.3
   gamma: 0.99
   tau: 0.005
 
   # Used for the dueling MLPs + GRU in the neural BP decoder
-  neural_bp_iterations: 10
+  neural_bp_iterations: 4
   neural_bp_hidden_dim: 128
 
   hidden_layers_gnn:
     - 32
     - 128
-    - 64
+    - 256
+    - 512
+    - 512
+    - 256
+    - 256
 
   hidden_layers_mlp:
+    - 256
     - 128
     - 64
 
@@ -56,22 +61,24 @@ sac:
 
 moe:
   moe_experts:
-#    - pretrained_encoder
-    - sac
     - bp
-    - bp_osd
-    - pretrained_encoder
+    - sac_nbp
 
   moe_hidden_layers_gnn:
     - 32
     - 128
-    - 64
+    - 256
+    - 512
+    - 512
+    - 256
+    - 256
 
   moe_hidden_layers_mlp:
+    - 256
     - 128
     - 64
 
-  moe_learning_rate: 0.0001
+  moe_learning_rate: 0.00001
   latency_penalty_factor: 10 # 0 for no penalty
 
 encoder:
