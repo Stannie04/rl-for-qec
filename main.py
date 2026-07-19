@@ -23,7 +23,7 @@ def select_experiment(experiment_name):
     match experiment_name:
         case "rl": return train_rl
         case "sl": return train_sl
-        case "ensemble": return train_router
+        case "router": return train_router
         case "all": return train_all
         case "benchmark": return benchmark_env
         case "hpo": return optimize_hyperparameters

@@ -20,7 +20,7 @@ curriculum_start_weight: 1
 curriculum_end_weight: 4
 curriculum_warmup_steps: 3000
 
-# MoE training parameters
+# Router (MoE) training parameters
 moe_num_timesteps: 10000
 moe_start_p: 0.15
 moe_end_p: 0.05
