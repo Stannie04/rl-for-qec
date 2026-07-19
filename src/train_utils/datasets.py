@@ -4,13 +4,13 @@ import os
 import numpy as np
 import torch
 from tqdm import tqdm
-from collections import Counter
+from collections import Counter, defaultdict
 from itertools import combinations
 from math import comb
 
 from src.environment import QLDPCEnv
-from src.agents import SACAgent, BPAgent, BPOSDAgent
 from src.train_utils.curriculum import CurriculumScheduler
+from src.train_utils.inference import get_agent_and_inference, parallel_inference
 
 
 def load_shots(config, dataset_type="random", noise_model="bit_flip", agent_name=None, num_epochs=None):
@@ -21,7 +21,7 @@ def load_shots(config, dataset_type="random", noise_model="bit_flip", agent_name
         case "all": shots = np.load(f"datasets/{config.code_name}/all_{noise_model}.npy", allow_pickle=True)
         case "moe": shots = np.load(f"datasets/{config.code_name}/moe_{noise_model}.npy", allow_pickle=True)
         case "mistakes":
-            shots = np.load(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}_all.npy", allow_pickle=True)
+            shots = np.load(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}_uniform.npy", allow_pickle=True)
 
             # If num_epochs is specified, repeat the dataset to match the number of epochs
             # Shape of shots is (num_samples * num_epochs, 2, n)
@@ -35,12 +35,12 @@ def load_shots(config, dataset_type="random", noise_model="bit_flip", agent_name
 
         case _: raise ValueError(f"Unknown dataset type: {dataset_type}")
 
+    print(f"Loaded {len(shots)} number of shots")
     return shots
 
 
 def create_dataset_from_moe_shots(config, noise_model="bit_flip", save=False):
     hard_shots = load_shots(config, dataset_type="mistakes", noise_model=noise_model, agent_name="bp")
-
     # Note that this does also sample some hard shots, though the vast majority will be easy shots. The small imbalance this creates is not a problem.
     easy_shots = create_dataset_from_uniform_shots(config, num_samples_per_error=int(len(hard_shots)/4), max_error=4, noise_model="bit_flip", save=False)
 
@@ -103,6 +103,38 @@ def create_dataset_from_random_shots(config, num_samples, error_rate, noise_mode
 
     return shots
 
+
+def create_dataset_from_random_shots_labelled(config, num_samples, error_rates, noise_model="bit_flip", save=False):
+
+    shot_counts = defaultdict(lambda: np.zeros(len(error_rates), dtype=np.int64))
+    packed_shots = {}
+
+    for i, error_rate in enumerate(error_rates):
+        shots = create_dataset_from_random_shots(config, num_samples, error_rate, noise_model=noise_model, save=False)
+
+        packed = np.packbits(shots.reshape(num_samples, -1), axis=-1)
+        unique, counts = np.unique(packed, axis=0, return_counts=True)
+        print(f"Error rate {error_rate}: {len(unique)} unique shots out of {num_samples} samples.")
+
+        for shot, count in zip(unique, counts):
+            key = shot.tobytes()
+            shot_counts[key][i] = count
+
+            # Store packed representation once
+            if key not in packed_shots:
+                packed_shots[key] = shot
+
+    keys = list(packed_shots.keys())
+
+    unique_packed = np.stack([packed_shots[k] for k in keys])
+    unique_flat = np.unpackbits(unique_packed,axis=1,count=2 * config.n,)
+    unique_shots = unique_flat.reshape(-1, 2, config.n)
+
+    counts = np.stack([shot_counts[k] for k in keys])
+
+    print(f"\nTotal unique shots across all error rates: {len(unique_shots)}")
+    return unique_shots, counts
+
 def create_dataset_from_uniform_shots(config, num_samples_per_error, max_error, noise_model="bit_flip", save=False):
 
     shots = np.zeros((num_samples_per_error * max_error, 2, config.n), dtype=np.int8)
@@ -147,41 +179,9 @@ def create_dataset_from_nonzero_shots(config, num_samples, error_rate, noise_mod
 
 def create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform", noise_model="bit_flip", save=False):
 
-    env = QLDPCEnv(config)
-    match agent_name:
-        case "sac":
-            config.use_neural_bp = False
-
-            agent = SACAgent(env, config)
-            checkpoint = torch.load(f"checkpoints/{config.agent_name}_{config.code_name}_llr.pt", map_location=config.device)
-            agent.actor.load_state_dict(checkpoint["actor"])
-            agent.critic1.load_state_dict(checkpoint["critic1"])
-            agent.critic2.load_state_dict(checkpoint["critic2"])
-        case "sac_finetuned":
-            config.use_neural_bp = True
-
-            agent = SACAgent(env, config)
-            checkpoint = torch.load(f"checkpoints/{config.agent_name}_{config.code_name}_neural_bp.pt", map_location=config.device)
-            agent.actor.load_state_dict(checkpoint["actor"])
-            agent.critic1.load_state_dict(checkpoint["critic1"])
-            agent.critic2.load_state_dict(checkpoint["critic2"])
-        case "bp": agent = BPAgent(env, config)
-        case "bp_osd": agent = BPOSDAgent(env, config)
-        case _: raise NotImplementedError
-
-    dataset = []
     shots = load_shots(config, dataset_type=shot_type, noise_model=noise_model)
-    for error_pattern_x, error_pattern_z in tqdm(shots, desc=f"Creating dataset for {agent_name}", leave=False):
-        obs, info = env.reset_with_error_pattern(error_pattern_x, error_pattern_z)
-
-        done = info["error_free"]
-        while not done:
-            action, _ = agent.select_action(obs, evaluate=True)
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-
-        if not info["error_free"]:
-            dataset.append([error_pattern_x, error_pattern_z])
+    mistake_chunks = parallel_inference(agent_name, config, shots, task="mistakes")
+    dataset = [mistake for chunk in mistake_chunks for mistake in chunk]
 
     print(f"Collected {len(dataset)} samples of expert mistakes for agent {agent_name} on code {config.code_name}.")
 
@@ -189,8 +189,10 @@ def create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform",
         os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
         np.save(f"datasets/{config.code_name}/mistakes_{agent_name}_{noise_model}_{shot_type}.npy", np.array(dataset))
 
+    return dataset
 
-def create_dataset_from_pretrained_encoder_mistakes(config, model, shot_type="uniform", noise_model="bit_flip", save=False):
+
+def create_dataset_from_pretrained_encoder_mistakes(config, model, shot_type="uniform", noise_model="bit_flip", encoder_type="nbp", save=False):
     dataset = []
     # shots = load_shots(config, dataset_type=shot_type, noise_model=noise_model)
     # shots = create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e4), max_error=4, noise_model=noise_model, save=True)
@@ -213,11 +215,12 @@ def create_dataset_from_pretrained_encoder_mistakes(config, model, shot_type="un
 
     if save:
         os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
-        np.save(f"datasets/{config.code_name}/mistakes_finetuned_encoder_early_{noise_model}.npy", np.array(dataset))
+        np.save(f"datasets/{config.code_name}/mistakes_finetuned_{encoder_type}_early_{noise_model}.npy", np.array(dataset))
+
+    return dataset
 
 
-def create_dataset_from_all_permutations(config, noise_model="bit_flip", save=False):
-    num_errors = [3, 4]
+def create_dataset_from_all_permutations(config, num_errors=[3,4], noise_model="bit_flip", save=False):
     num_samples = sum(comb(config.n, weight) for weight in num_errors)
 
     print(f"Creating dataset of all {num_samples} permutations in {config.code_name}")
@@ -235,12 +238,12 @@ def create_dataset_from_all_permutations(config, noise_model="bit_flip", save=Fa
         os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
         np.save(f"datasets/{config.code_name}/all_{noise_model}.npy", shots)
 
+    return shots
+
 def create_all_datasets(config):
-    # create_dataset_from_random_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_end_error_rate, save=True)
-    # create_dataset_from_nonzero_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_end_error_rate, save=True)
-    # create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), max_error=4, noise_model="bit_flip", save=True)
-    # create_dataset_from_all_permutations(config, noise_model="bit_flip", save=True)
+    create_dataset_from_random_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_end_error_rate, save=True)
+    create_dataset_from_nonzero_shots(config, num_samples=int(1e6), noise_model="bit_flip", error_rate=config.curriculum_end_error_rate, save=True)
+    create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), max_error=4, noise_model="bit_flip", save=True)
+    create_dataset_from_all_permutations(config, noise_model="bit_flip", save=True)
     create_dataset_from_moe_shots(config, save=True)
-    #
-    # for agent_name in config.moe_experts:
-    #     create_dataset_from_expert_mistakes(config, agent_name, shot_type="all", noise_model="bit_flip", save=True)
+    create_dataset_from_random_shots_labelled(config, num_samples=int(1e7), noise_model="bit_flip", error_rate=config.curriculum_end_error_rate, save=False)

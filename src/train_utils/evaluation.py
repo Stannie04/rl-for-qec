@@ -1,94 +1,15 @@
 from __future__ import annotations
 import time
-import torch
 import numpy as np
-from sympy import logcombine
 from tqdm import tqdm
 from prettytable import PrettyTable
-import matplotlib.pyplot as plt
-import os
-import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor
 
-from src.agents import RandomAgent, SilentAgent, DQNAgent, SACAgent, BPAgent, BPOSDAgent
+from src.agents import SACAgent, CGNNEncoder, RouterAgent
 from src.environment import QLDPCEnv
 from src.read_config import ConfigParser
-from src.train_utils.datasets import create_dataset_from_random_shots, load_shots, create_dataset_from_uniform_shots
-
-
-def get_agent(config, env, agent_name):
-    if type(agent_name) == str:
-        match agent_name:
-            case "sac":
-                agent = SACAgent(env, config)
-                checkpoint_name = f"{config.agent_name}_{config.code_name}" if config.wandb_run_name is None else f"{config.agent_name}_{config.code_name}_{config.wandb_run_name}"
-                checkpoint = torch.load(f"checkpoints/{checkpoint_name}.pt", map_location=config.device)
-                agent.actor.load_state_dict(checkpoint["actor"])
-                agent.critic1.load_state_dict(checkpoint["critic1"])
-                agent.critic2.load_state_dict(checkpoint["critic2"])
-                return agent
-            case "bp":
-                return BPAgent(env, config)
-            case "bp_osd":
-                return BPOSDAgent(env, config)
-            case "static":
-                return SilentAgent(env, config)
-            case _:
-                raise NotImplementedError
-    else:
-        return agent_name
-
-
-
-def render_evaluation_episode(config, model_checkpoint, max_episode_steps=100):
-
-    env = QLDPCEnv(config)
-    agent = DQNAgent(env, config, evaluation_mode=True)
-    agent.model.load_state_dict(torch.load(model_checkpoint, map_location=config.device))
-
-    obs, info = env.reset()
-    env.render()
-
-    for step in range(max_episode_steps):
-        action, _ = agent.model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, info = env.step(action)
-        print(f"Step {step+1}: Reward={reward}, Terminated={terminated}, Truncated={truncated}, Info={info}")
-        print(f"Action taken: {action}")
-        env.render()
-
-        if terminated or truncated:
-            print(f"Episode finished after {step+1} steps with reward {reward} and info {info}")
-            return
-
-    print("Episode finished without termination or truncation.")
-
-
-def run_baselines(config):
-
-    silent_agent = SilentAgent(config)
-    random_agent = RandomAgent(config)
-
-    results = {}
-    for agent, name in [(silent_agent, "Silent Agent"), (random_agent, "Random Agent")]:
-        env = QLDPCEnv(config)
-
-        total_rewards = []
-        for i in tqdm(range(10_000), desc=f"Evaluating {name}"):
-            obs, info = env.reset()
-            done = False
-            total_reward = 0
-
-            while not done:
-                action = agent.select_action(obs)
-                obs, reward, terminated, truncated, info = env.step(action)
-                total_reward += reward
-                done = terminated or truncated
-
-            total_rewards.append(total_reward)
-
-        results[name] = total_rewards
-
-    return results
+from src.train_utils.datasets import create_dataset_from_random_shots,  create_dataset_from_uniform_shots, create_dataset_from_random_shots_labelled
+from src.train_utils.inference import get_agent_and_inference, parallel_inference
+from src.train_utils.plotting import plot_results
 
 
 def benchmark_env(config):
@@ -146,90 +67,158 @@ def benchmark_env(config):
     print(t)
 
 
+
 def evaluate_agent(config: ConfigParser, step, best_model_ler, agent_name=None, checkpoint_dir=None):
-    # Evaluate the logical error rate of the agent over a number of episodes, without exploration noise.
+    # Evaluate the logical error rate of the agent over a number of episodes.
 
-    # print("\n", "="*20, f"Evaluating Agent: {agent_name.upper()}", "="*20, "\n")
+    num_samples_per_error = 1000
+    max_error = 4
 
-    # NOTE: we create 10 times the number of samples we need for evaluation to ensure we have enough unique episodes, since some episodes may be duplicates due to the random sampling process.
-    # The sampling process is fast enough that this does not cause a significant slowdown.
-    shots = create_dataset_from_uniform_shots(config, num_samples_per_error=1000, max_error=4, noise_model="bit_flip")
-    # shots = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name="bp")
-    num_shots = len(shots)
-    logical_failures = 0
-    successes = 0
+    shots = create_dataset_from_uniform_shots(
+        config,
+        num_samples_per_error=num_samples_per_error,
+        max_error=max_error,
+        noise_model="bit_flip",
+    )
 
     eval_env = QLDPCEnv(config, shots)
-    agent = get_agent(config, eval_env, agent_name)
+    agent, _ = get_agent_and_inference(config, eval_env, agent_name)
 
-    for _ in tqdm(eval_env.shots, desc="Evaluating agent", leave=False):
-        obs, info = eval_env.reset()
-        done = info["error_free"]
-        episode_return = 0.0
-        episode_length = 0
+    logical_failures = 0
+    total_shots = len(shots)
 
-        while not done:
+    # LER per error weight
+    successes_per_weight = [0] * max_error
 
-            action, probs = agent.select_action(obs, evaluate=True)
-            obs, reward, terminated, truncated, info = eval_env.step(action)
-            done = terminated or truncated
-            episode_length += 1
-            episode_return += reward
+    for i in range(max_error):
+        error_weight = i + 1
 
-        if info["error_free"]:
-            successes += 1
-        else: # NOTE: This fails both for logical errors and for truncation.
-            logical_failures += 1
+        for _ in tqdm(range(num_samples_per_error), desc=f"Evaluating agent at error weight {error_weight}", leave=False):
+            obs, info = eval_env.reset()
+            done = info["error_free"]
 
-    ler = float(logical_failures) / num_shots
-    print(f"Logical Error Rate: {ler:.4f}\n")
+            while not done:
+                action, _ = agent.select_action(obs, evaluate=True)
+                obs, reward, terminated, truncated, info = eval_env.step(action)
+                done = terminated or truncated
+
+            if info["error_free"]:
+                successes_per_weight[error_weight - 1] += 1
+
+    ler = logical_failures / total_shots
+
+    # LER for weights 1..4
+    acc_per_weight = [
+        successes_per_weight[i] / num_samples_per_error
+        for i in range(max_error)
+    ]
+
+    print(f"{acc_per_weight[0]}, {acc_per_weight[1]}, {acc_per_weight[2]}, {acc_per_weight[3]}")
 
     if checkpoint_dir is not None:
-        agent.save(f"{checkpoint_dir}/eval_{step}_ler_{ler}.pt")
+        filename = (
+            f"{checkpoint_dir}/eval_{step}_"
+            f"{acc_per_weight[0]:.2f}_"
+            f"{acc_per_weight[1]:.2f}_"
+            f"{acc_per_weight[2]:.2f}_"
+            f"{acc_per_weight[3]:.2f}.pt"
+        )
+        agent.save(filename)
 
         if ler < best_model_ler:
-            best_model_ler = ler
-            agent.save(f"{checkpoint_dir}/best.pt")
-            print(f"New best model saved with LER {best_model_ler:.4f}")
-
             best_model_ler = ler
 
     return ler, best_model_ler
 
 
+def per_to_ler_router(config):
+    results = {"BP": {}, "Neural BP": {}, "Router": {}, "Optimal Router": {}}
+
+
+    for error_rate in [0.01, 0.0075, 0.005, 0.0025, 0.001]:
+        shots = create_dataset_from_random_shots(config, config.post_training_evaluation_episodes, error_rate, noise_model="bit_flip")
+
+        moe_env = QLDPCEnv(config, shots)
+        bp_env = QLDPCEnv(config, shots)
+        neural_env = QLDPCEnv(config, shots)
+
+        router = RouterAgent(config, moe_env, router_checkpoint="checkpoints/evaluate_cps/router.pt")
+        bp_agent, bp_inference = get_agent_and_inference(config, bp_env, "bp")
+        neural_agent, neural_inference = get_agent_and_inference(config, neural_env, "sac_nbp_big")
+
+        logical_failures_bp, logical_failures_neural, logical_failures_both, logical_failures_router = 0, 0, 0, 0
+
+        for _ in tqdm(bp_env.shots, desc=f"Evaluating at error rate {error_rate}", leave=False):
+
+            obs, info = moe_env.reset()
+
+            if info["error_free"]:
+                # If the environment is already error-free, we can skip this episode since both agents will succeed.
+                _, _ = bp_env.reset()
+                _, _ = neural_env.reset()
+                continue  # Skip if the environment is already error-free
+
+            router_pred, _ = router.select_action(obs)
+
+            # Since the environments are reset with the same shots, we can evaluate both agents on the same error instance.
+            bp_success = bp_inference(bp_agent, bp_env)
+            neural_success = neural_inference(neural_agent, neural_env)
+
+            logical_failures_bp += not bp_success
+            logical_failures_neural += not neural_success
+            logical_failures_both += not (bp_success or neural_success)
+            logical_failures_router += not (bp_success, neural_success)[router_pred]
+
+        results["BP"][error_rate] = logical_failures_bp / config.post_training_evaluation_episodes
+        results["Neural BP"][error_rate] = logical_failures_neural / config.post_training_evaluation_episodes
+        results["Router"][error_rate] = logical_failures_router / config.post_training_evaluation_episodes
+        results["Optimal Router"][error_rate] = logical_failures_both / config.post_training_evaluation_episodes
+
+    return results
+
+
+def per_to_ler_agents(config, agents):
+
+    error_rates = [0.01, 0.0075, 0.005, 0.0025, 0.001]
+    results = {}
+
+    for i in range(config.n_repetitions):
+        all_shots = create_dataset_from_random_shots_labelled(config, config.post_training_evaluation_episodes, error_rates, noise_model="bit_flip")
+
+        for agent_name in agents:
+
+            shots, counts = all_shots
+            failures = parallel_inference(agent_name, config, shots, task="failures", repetition=i+1)
+            logical_error_rates = sum(counts[np.where(failures)]) / config.post_training_evaluation_episodes
+
+            results[f"{agent_name}_{i+1}"] = {error_rates[i]: logical_error_rates[i] for i in range(len(error_rates))}
+            print(f"\nResults for {agent_name}: {results[f'{agent_name}_{i+1}']}\n")
+
+    return results
+
+
+
+def generalizability_evaluation(config, agents):
+
+    results = {}
+    codes = ["288_2_12_toric"]
+    for code in codes:
+        config = ConfigParser("configs", config.agent_name, code, run_name=config.wandb_run_name, verbose=config.verbose)
+        results[code] = per_to_ler_agents(config, agents)
+
+    return results
+
+
 def post_train_evaluation(config):
     # Evaluate the agent at the end of training and print results to console.
-    eval_agent_results = evaluate_agent(config, agent_name=config.agent_name, log_progress=True)
-
-    config.wandb_run_name = "llr"
-    config.use_neural_bp = False
-    baseline_results = evaluate_agent(config, agent_name=config.agent_name, log_progress=True)
-
-    bp_results = evaluate_agent(config, agent_name="bp", log_progress=True)
-    bp_osd_results = evaluate_agent(config, agent_name="bp_osd", log_progress=True)
-
-    print("\nFinal Evaluation Results:")
-    for key, value in eval_agent_results.items():
-        print(f"{key}: {value:.4f}")
-
-    print("\nBP Baseline Results:")
-    for key, value in bp_results.items():
-        print(f"{key}: {value:.4f}")
-
-    print("\nBP+OSD Baseline Results:")
-    for key, value in bp_osd_results.items():
-        print(f"{key}: {value:.4f}")
+    agents = ["rl_cgnn", "sl_cgnn", "sl_nbp", "rl_nbp", "bp", "bp_osd"]
 
 
-    # Plot results
-    plot = plt.figure(figsize=(10, 6))
-    plt.plot(list(eval_agent_results.keys()), list(eval_agent_results.values()), marker='o', label=f"{config.agent_name.upper()}")
-    plt.plot(list(bp_results.keys()), list(bp_results.values()), marker='o', label="BP")
-    plt.plot(list(bp_osd_results.keys()), list(bp_osd_results.values()), marker='o', label="BP+OSD")
-    plt.yscale('log')
-    plt.xlabel("Physical Error Rate")
-    plt.ylabel("Logical Error Rate")
-    plt.title(f"Logical Error Rate vs Physical Error Rate for {config.code_name}")
-    plt.grid(True, which="both", ls="--")
-    plt.legend()
-    plt.savefig(f"results/{config.agent_name}_{config.code_name}_evaluation.png")
+    results = per_to_ler_agents(config, agents)
+    print(results)
+    plot_results(results, config,f"results/{config.agent_name}_{config.code_name}_agents_evaluation.png")
+
+    results = per_to_ler_router(config)
+    plot_results(results, config,f"results/{config.agent_name}_{config.code_name}_moe_evaluation.png")
+
+    generalizability_evaluation(config, agents)

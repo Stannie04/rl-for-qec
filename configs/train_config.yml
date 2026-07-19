@@ -1,25 +1,27 @@
-n_repetitions: 1
+n_repetitions: 5
 num_timesteps: 10000
-num_pretrain_timesteps: 10000
-max_episode_length: 10
+num_pretrain_timesteps: 100000
+max_episode_length: 5
 
 # Environment parameters
 noise_model: "bit_flip"
 
 # Evaluation parameters
-evaluate_during_training: False
-steps_between_evaluation: 100000
-num_eval_episodes: 10000
+evaluate_during_training: True
+steps_between_evaluation: 1000
+steps_between_pretrain_evaluation: 5000
+
+post_training_evaluation_episodes: 500000
 
 # Curriculum learning parameters
 curriculum_start_error_rate: 0.001
-curriculum_end_error_rate: 0.05
+curriculum_end_error_rate: 0.01
 curriculum_start_weight: 1
-curriculum_end_weight: 5
-curriculum_warmup_steps: 25000
+curriculum_end_weight: 4
+curriculum_warmup_steps: 3000
 
 # MoE training parameters
-moe_num_timesteps: 1000
+moe_num_timesteps: 10000
 moe_start_p: 0.15
 moe_end_p: 0.05
 moe_time_penalty_factor: 100
@@ -27,3 +29,5 @@ moe_time_penalty_factor: 100
 # Logging parameters for Weights & Biases
 wandb_logging: True
 wandb_project: "rl-for-qec"
+
+num_workers: 8
