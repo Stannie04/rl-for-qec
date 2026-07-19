@@ -1,10 +1,9 @@
-from email.utils import encode_rfc2231
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, global_mean_pool, GraphConv, GATConv
-from src.agents.common import NeuralBPEncoder, TannerEncoder, get_action_mask, get_qubit_mask
+from src.agents.common import  get_action_mask, get_qubit_mask
+from src.agents.encoders import NeuralBPEncoder, CGNNEncoder
 
 
 def _get_batch(data, num_nodes, device):
@@ -24,7 +23,7 @@ class GNNActor(nn.Module):
             self.encoder = NeuralBPEncoder(config, env)
             encoder_output_dim = config.neural_bp_hidden_dim
         else:
-            self.encoder = TannerEncoder(config, env)
+            self.encoder = CGNNEncoder(config, env)
             encoder_output_dim = config.hidden_layers_gnn[-1]
 
         action_head_layers = []
@@ -85,7 +84,7 @@ class GNNCritic(nn.Module):
             self.encoder = NeuralBPEncoder(config, env)
             encoder_output_dim = config.neural_bp_hidden_dim
         else:
-            self.encoder = TannerEncoder(config, env)
+            self.encoder = CGNNEncoder(config, env)
             encoder_output_dim = config.hidden_layers_gnn[-1]
 
         action_head_layers = []

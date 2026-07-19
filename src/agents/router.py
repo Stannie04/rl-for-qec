@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GCNConv, global_mean_pool, GraphConv, GATConv
-from src.agents.common import TannerEncoder, NeuralBPEncoder
+from src.agents.encoders import NeuralBPEncoder, CGNNEncoder
 
 
 class Router(nn.Module):
@@ -10,11 +10,13 @@ class Router(nn.Module):
 
         self.env = env
         self.device = env.device
-        # self.encoder = TannerEncoder(config.moe_hidden_layers_gnn, env.code.feature_dim)
-        # prev_dim = config.moe_hidden_layers_gnn[-1]
 
-        self.encoder = NeuralBPEncoder(config, env)
-        prev_dim = config.encoder_hidden_dim
+        if config.use_neural_bp:
+            self.encoder = NeuralBPEncoder(config, env)
+            prev_dim = config.encoder_hidden_dim
+        else:
+            self.encoder = CGNNEncoder(config.moe_hidden_layers_gnn, env.code.feature_dim)
+            prev_dim = config.moe_hidden_layers_gnn[-1]
 
         classification_layers = []
         for hidden_dim in config.moe_hidden_layers_mlp:
@@ -33,11 +35,8 @@ class Router(nn.Module):
         return self.action_head(graph_feat)
 
 
-    def save(self):
-        torch.save(self.state_dict(), "checkpoints/router.pt")
-
-class MoEAgent:
-    def __init__(self, config, env):
+class RouterAgent:
+    def __init__(self, config, env, router_checkpoint=None, encoder_checkpoint=None):
         self.env = env
         self.device = env.device
         self.router = Router(config, env).to(self.device)
@@ -45,6 +44,12 @@ class MoEAgent:
 
         self.baseline = 0.0
         self.baseline_alpha = 0.99
+
+        if router_checkpoint is not None:
+            self.load_router(router_checkpoint)
+
+        if encoder_checkpoint is not None:
+            self.load_encoder(encoder_checkpoint)
 
 
     def update(self, log_prob, reward):
@@ -71,5 +76,12 @@ class MoEAgent:
 
         return action.item(), dist.log_prob(action)
 
-    def save(self):
-        self.router.save()
+    def save(self, path):
+        torch.save(self.router.state_dict(), path)
+
+    def load_router(self, checkpoint):
+        self.router.load_state_dict(torch.load(checkpoint, map_location=self.device))
+
+    def load_encoder(self, checkpoint):
+        full_cp = torch.load(checkpoint, map_location=self.device)
+        self.router.encoder.load_state_dict(full_cp["encoder"])

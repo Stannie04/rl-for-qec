@@ -1,28 +1,28 @@
-from src.agents import NeuralBPEncoder, get_qubit_mask, NeuralBPPretrainer
+from src.agents import NeuralBPEncoder, SLAgent
+from src.agents.encoders import CGNNEncoder
 from src.environment import QLDPCEnv
 from src.train_utils import create_dataset_from_curriculum, create_dataset_from_uniform_shots, create_dataset_from_pretrained_encoder_mistakes
-import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-import numpy as np
 import time
 import os
 
 
+def train_sl(config):
 
-def pretrain_encoder(config):
+    encoder_type = "nbp" if config.use_neural_bp else "cgnn"
 
-    checkpoint_dir = f"pretrain_{config.code_name}_{int(time.time())}"
+    checkpoint_dir = f"sl_{encoder_type}{config.neural_bp_iterations}_{config.code_name}_{config.wandb_run_name}_{int(time.time())}"
     os.makedirs(f"checkpoints/{checkpoint_dir}", exist_ok=True)
 
-    print(f"Pretraining encoder for code {config.code_name} for {config.num_pretrain_timesteps} steps with learning rate {config.encoder_learning_rate}.")
+    print(f"Pretraining {encoder_type} encoder for code {config.code_name} for {config.num_pretrain_timesteps} steps with learning rate {config.encoder_learning_rate}.")
 
     shots = create_dataset_from_curriculum(config, config.num_pretrain_timesteps)
 
     env = QLDPCEnv(config, shots)
-    encoder = NeuralBPEncoder(config, env)
-    model = NeuralBPPretrainer(encoder, config, env.code.n_data).to(config.device)
+
+    model = SLAgent(config, env).to(config.device)
     opt = torch.optim.Adam(model.parameters(), lr=config.encoder_learning_rate)
 
     for i in tqdm(range(config.num_pretrain_timesteps)):
@@ -37,9 +37,6 @@ def pretrain_encoder(config):
 
         if (i+1) % config.steps_between_pretrain_evaluation == 0:
             evaluate_pretrained_encoder(config, model, checkpoint_dir, threshold=0.5, step=i+1)
-
-
-    post_pretrain_evaluation(config, model)
 
 
 def evaluate_pretrained_encoder(config, model, checkpoint_dir, threshold=None, step=None):
@@ -77,37 +74,8 @@ def evaluate_pretrained_encoder(config, model, checkpoint_dir, threshold=None, s
     full_rate_2 = topk_full_counts[1] / num_samples_per_error
     full_rate_3 = topk_full_counts[2] / num_samples_per_error
     full_rate_4 = topk_full_counts[3] / num_samples_per_error
-    model.save(f"checkpoints/{checkpoint_dir}/neural_bp_{step}_{full_rate_1:.2f}_{full_rate_2:.2f}_{full_rate_3:.2f}_{full_rate_4:.2f}.pt")
+    model.save(f"checkpoints/{checkpoint_dir}/{model.encoder.name}_{step}_{full_rate_1:.2f}_{full_rate_2:.2f}_{full_rate_3:.2f}_{full_rate_4:.2f}.pt")
 
-            # for k in range(1, max_error + 1):
-            #     topk_indices = torch.topk(error_pred, k=k).indices
-            #     num_correct = torch.isin(
-            #         topk_indices,
-            #         true_indices
-            #     ).sum().item()
-            #     # At least one correct
-            #     if num_correct > 0:
-            #         topk_hit_counts[k - 1] += 1
-            #     # All true errors recovered
-            #     if num_correct == len(true_indices):
-            #         topk_full_counts[k - 1] += 1
-
-    # for k in range(1, max_error + 1):
-    #     # hit_rate = topk_hit_counts[k - 1] / num_samples_per_error
-    #     full_rate = topk_full_counts[k - 1] / num_samples_per_error
-    #
-    #     print(
-    #         f"Top-{k}: "
-    #         # f"hit={hit_rate:.3%}, "
-    #         f"full_recovery={full_rate:.3%}"
-    #     )
 
 def post_pretrain_evaluation(config, model):
-
-    # evaluate_pretrained_encoder(config, model, threshold=0.5)
-
     create_dataset_from_pretrained_encoder_mistakes(config, model, save=True)
-
-    # for threshold_value in np.linspace(0.1, 0.9, 9):
-    #     print(f"\nEvaluating pretrained encoder with threshold {threshold_value:.2f}")
-    #     evaluate_pretrained_encoder(config, model, threshold=threshold_value)

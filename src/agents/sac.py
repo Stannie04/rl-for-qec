@@ -3,13 +3,11 @@ import random
 import math
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
-from torch_geometric.data import Data, Batch
+from torch_geometric.data import Batch
 from torch.distributions.categorical import Categorical
 
-from .networks import GNNActor, GNNCritic
+from .sac_networks import GNNActor, GNNCritic
 
 
 class PrioritizedReplayBuffer:
@@ -64,8 +62,7 @@ class ReplayBuffer:
     def push(self, state, action, reward, next_state, done):
         # Store transition (state: Data, next_state: Data)
         # self.buffer.append((state, action, reward, next_state, done))
-        for a in action:
-            self.buffer.append((state, a, reward, next_state, done))
+        self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
@@ -76,7 +73,7 @@ class ReplayBuffer:
 
 
 class SACAgent:
-    def __init__(self, env, config):
+    def __init__(self, env, config, checkpoint=None):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = env
 
@@ -115,6 +112,9 @@ class SACAgent:
         self.total_steps = 0
         self.inference_threshold = config.inference_threshold
 
+        if checkpoint:
+            self.load(checkpoint)
+
     def select_action(self, state, evaluate=False):
 
         if self.discrete:
@@ -122,9 +122,7 @@ class SACAgent:
                 logits, log_probs, probs = self.actor(state.to(self.device))
 
                 if evaluate:
-                    action = (probs[0] > 0.2).nonzero().squeeze(1)
-                    if action.numel() == 0: # Ensure at least one action is selected
-                        action = probs.argmax(dim=-1)
+                    action = probs.argmax(dim=-1)
                 else:
                     action = Categorical(probs).sample()
             return action, probs
@@ -227,3 +225,9 @@ class SACAgent:
             'alpha_opt': self.alpha_opt.state_dict(),
             'log_alpha': self.log_alpha,
         }, path)
+
+    def load(self, path):
+        checkpoint = torch.load(path, map_location=self.device)
+        self.actor.load_state_dict(checkpoint["actor"])
+        self.critic1.load_state_dict(checkpoint["critic1"])
+        self.critic2.load_state_dict(checkpoint["critic2"])
