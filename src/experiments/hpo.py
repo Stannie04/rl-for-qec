@@ -2,10 +2,8 @@ import optuna
 import numpy as np
 
 from src.environment import QLDPCEnv
-from src.agents import DQNAgent, SACAgent
+from src.agents import SACAgent
 from src.train_utils import evaluate_agent
-
-from tqdm import tqdm
 
 
 def sample_sac_params(trial: optuna.Trial) -> dict:
@@ -29,21 +27,6 @@ def sample_sac_params(trial: optuna.Trial) -> dict:
         "hidden_dim": trial.suggest_categorical("hidden_dim", [128, 256, 512])
     }
 
-
-def sample_dqn_params(trial: optuna.Trial) -> dict:
-    """
-    Define the search space for DQN hyperparameters.
-    """
-    return {
-        "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256, 512]),
-        "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
-        "buffer_size": trial.suggest_categorical("buffer_size", [100000, 200000, 500000]),
-        "gamma": trial.suggest_float("gamma", 0.95, 0.999),
-        "train_freq": trial.suggest_categorical("train_freq", [1, 4, 8]),
-        "gradient_steps": trial.suggest_categorical("gradient_steps", [1, 4, 8]),
-        "target_update_freq": trial.suggest_categorical("target_update_freq", [1000, 5000, 10000]),
-        "epsilon_decay": trial.suggest_categorical("epsilon_decay", [1000, 5000, 10000, 50000, 100000]),
-    }
 
 
 def objective(trial: optuna.Trial, config) -> float:

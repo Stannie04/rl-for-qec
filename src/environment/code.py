@@ -2,7 +2,7 @@ import gymnasium as gym
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-from torch_geometric.data import Data, HeteroData
+from torch_geometric.data import Data
 import torch
 import galois
 from src.read_config import ConfigParser
@@ -80,8 +80,6 @@ class QLDPCCode(gym.Env):
         # error_type = 1: X error
         # error_type = 2: Z error
         # error_type = 3: Y error
-        if qubit_index == self.no_op_index:
-            return
 
         if error_type != 2:
             self.num_x_errors += 1 - 2 * self.x_errors[qubit_index]
@@ -411,7 +409,8 @@ class QLDPCCode(gym.Env):
             self._get_edge_information()
             return
 
-        pos = nx.multipartite_layout(self.graph, subset_key="layer")
+        # pos = nx.multipartite_layout(self.graph, subset_key="layer")
+        pos = nx.spring_layout(self.graph, seed=42)  # Use a fixed seed for consistent layouts across runs
 
         # Separate node lists
         qubits = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "qubit" and self.x_errors[int(n[1:])] == 1]
@@ -511,7 +510,7 @@ class QLDPCCode(gym.Env):
         return self.graph.subgraph(nodes_to_include)
 
 
-    def render_subgraph(self, indices=None, overlap=None, mistakes=None, total=None, with_labels=False):
+    def render_subgraph(self, indices=None, overlap=None, mistakes=None, total=None, with_labels=False, with_title=False):
 
         if indices is not None:
             subgraph = self.get_subgraph_of_indices(indices)
@@ -524,8 +523,6 @@ class QLDPCCode(gym.Env):
             for n in subgraph.nodes
             if subgraph.nodes[n]["node_type"] == "qubit"
         }
-
-
 
         pos = nx.spring_layout(subgraph, seed=42)  # Use a fixed seed for consistent layouts across runs
 
@@ -563,7 +560,7 @@ class QLDPCCode(gym.Env):
 
         nx.draw_networkx_edges(subgraph, pos, edge_color="gray")
 
-        if overlap is not None and mistakes is not None and total is not None:
+        if with_title and overlap is not None and mistakes is not None and total is not None:
             plt.title(f"Pattern {overlap} (Mistake frequency: {mistakes} / {total}, {100 * mistakes / total:.2f}%)")
 
         plt.axis("off")

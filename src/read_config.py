@@ -32,7 +32,6 @@ class ConfigParser:
         if self.verbose:
             self._print_configuration()
 
-
     def _print_configuration(self):
         table = prettytable.PrettyTable()
         table.field_names = ["Parameter", "Value"]

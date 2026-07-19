@@ -1,6 +1,5 @@
 import gymnasium as gym
 import numpy as np
-import torch
 import galois
 
 from src.read_config import ConfigParser
@@ -14,7 +13,7 @@ class QLDPCEnv(gym.Env):
 
         self.code = QLDPCCode(config)
         self.action_space = gym.spaces.Discrete(self.code.n_data)
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.code.n_data,), dtype=np.int8)
+        # self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.code.n_data,), dtype=np.int8)
 
         self.curriculum_error_rate = config.curriculum_start_error_rate
         self.curriculum_num_flips = 1
@@ -27,7 +26,8 @@ class QLDPCEnv(gym.Env):
         self.previous_num_syndromes = 0
         self.initial_errors = 0
         self.initial_syndromes = 0
-        self.last_action = None
+
+        self.actions_taken = []
         self.correct_actions = []
         self.repeated_actions = []
 
@@ -45,31 +45,26 @@ class QLDPCEnv(gym.Env):
 
 
     def get_reward(self, actions):
-        reward = 0.0
+        reward = -0.05
 
         reward += -0.3 if self.info["repeated_action"] else 0.0
 
         syndrome_delta = self.previous_num_syndromes - self.info["num_syndromes"]
-        reward += 0.5 * syndrome_delta / max(1, self.initial_syndromes)
-
-        # reward -= 0.1 * self.info["num_syndromes"] / max(1, self.initial_syndromes)
-        # reward += 0.50 * (self.previous_num_errors - self.info["num_errors"]) / max(1, self.initial_errors)
-
-        # reward -= 0.01  # step penalty
+        reward += 0.5 * syndrome_delta / self.initial_syndromes
 
         if self.info["error_free"]:
-            efficiency = max(0.0, 1.0 - self.episode_steps / max(1, 2 * self.initial_errors))
-            reward += 2.0 + efficiency
+            efficiency = self.initial_errors / (self.initial_errors + self.episode_steps)
+            reward += 5 * efficiency
 
-        if self.info["logical_error"]:
-            reward -= 3.0
+        if self.truncated:
+            reward -= 5.0
 
         return reward
 
 
     @property
     def terminated(self):
-        return self.info["error_free"] or self.info["logical_error"]
+        return self.info["error_free"]
 
 
     @property
@@ -85,7 +80,7 @@ class QLDPCEnv(gym.Env):
             "num_syndromes": int(self.code.x_syndrome.sum() + self.code.z_syndrome.sum()),
             "error_free": self.code.is_error_free(),
             "logical_error": self.code.has_logical_error(),
-            "repeated_action": np.array_equal(self.last_action, self.last_action),
+            "repeated_action": self.actions_taken[-1] == self.actions_taken[-2] if len(self.actions_taken) > 1 else False,
 
             "logs": {
                     "Actions/Repeated Actions": np.mean(self.repeated_actions[-100:]) if self.repeated_actions else 0.0,
@@ -95,23 +90,19 @@ class QLDPCEnv(gym.Env):
 
 
     def step(self, action):
-        actions = action.cpu().numpy()
 
-        total_steps = 0
-        for action in actions:
-            action = int(action)
-            self.code.flip(action)
-            total_steps += 1
+        action = int(action.cpu().numpy())
+        self.code.flip(action)
 
-        self.episode_steps += max(1, total_steps)
+        self.episode_steps += 1
+        self.actions_taken.append(action)
 
         self.update_info()
-        reward = self.get_reward(actions)
+        reward = self.get_reward(action)
 
         self.previous_num_errors = self.info["num_errors"]
         self.previous_num_syndromes = self.info["num_syndromes"]
         self.repeated_actions.append(self.info["repeated_action"])
-        self.last_action = actions
 
         return self.observation, reward, self.terminated, self.truncated, self.info
 
@@ -125,7 +116,6 @@ class QLDPCEnv(gym.Env):
             return self.reset_with_error_pattern(error_pattern_x, error_pattern_z)
 
         self.code.clear_errors()
-        self.code.flip_set_number_of_qubits(1)
         self.code.flip_randomly(self.curriculum_error_rate)
 
         self._init_metrics_on_reset()
@@ -151,4 +141,4 @@ class QLDPCEnv(gym.Env):
         self.initial_syndromes = self.info["num_syndromes"]
         self.previous_num_errors = self.initial_errors
         self.episode_steps = 0
-        self.last_action = None
+        self.actions_taken = []
