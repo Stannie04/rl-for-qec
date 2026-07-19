@@ -18,6 +18,7 @@ checkpoints/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
+*.npy
 
 # Mono auto generated files
 mono_crash.*
