@@ -1,5 +1,7 @@
 # Generalizable Quantum Error Correction using an Ensemble of Neural Decoders
 
+**NOTE: For the code version used in the thesis, check out the `thesis` branch.**
+
 This repository contains the code and resources for the formulation, construction and training of
 reinforcement learning (RL)-driven quantum error correction (QEC) on multivariate bicycle codes, accompanying the thesis
 "Generalizable Quantum Error Correction using an Ensemble of Neural Decoders" (link will be provided once available).
