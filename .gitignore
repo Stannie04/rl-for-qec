@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+
+# Project-specific files
+datasets/
 .wandb/
 .vscode/
 __pycache__/
@@ -18,7 +21,6 @@ checkpoints/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
-*.npy
 
 # Mono auto generated files
 mono_crash.*
