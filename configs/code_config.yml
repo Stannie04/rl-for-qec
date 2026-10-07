@@ -3,6 +3,7 @@
 #
 
 144_12_12_ldpc:
+  code_type: ldpc
   n: 144
   k: 12
   d: 12
@@ -16,6 +17,7 @@
 
 
 18_4_4_ldpc:
+  code_type: ldpc
   n: 18
   k: 4
   d: 4
@@ -29,6 +31,7 @@
 
 
 30_4_5_ldpc:
+    code_type: ldpc
     n: 30
     k: 4
     d: 5
@@ -41,7 +44,8 @@
         B: [[1,0,0], [0,2,0], [0,0,2]] # x+ y^2 + z^2
 
 
-72_4_8_ldpc:
+72_4_8:
+    code_type: ldpc
     n: 72
     k: 4
     d: 8
@@ -59,6 +63,7 @@
 #
 
 18_2_3_toric:
+  code_type: toric
   n: 18
   k: 2
   d: 3
@@ -71,8 +76,8 @@
     B: [[0,1,0], [0,0,0]] # y + 1
 
 
-
 128_2_8_toric:
+  code_type: toric
   n: 128
   k: 2
   d: 8
@@ -86,6 +91,7 @@
 
 
 288_2_12_toric:
+  code_type: toric
   n: 288
   k: 2
   d: 12
@@ -98,7 +104,8 @@
     B: [[0,0,0], [0,1,0]]   # 1 + y
 
 
-800_2_20_toric:
+800_2_20:
+  code_type: toric
   n: 800
   k: 2
   d: 20
@@ -109,3 +116,20 @@
   code_params:
     A: [[0,0,0], [1,0,0]]   # 1 + x
     B: [[0,0,0], [0,1,0]]   # 1 + y
+
+
+#
+# Surface codes.
+#
+
+d3_surface:
+  code_type: surface
+  d: 3
+
+d5_surface:
+  code_type: surface
+  d: 5
+
+d7_surface:
+  code_type: surface
+  d: 7

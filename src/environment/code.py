@@ -15,12 +15,17 @@ class QLDPCCode(gym.Env):
         super(QLDPCCode, self).__init__()
         self.device = config.device
 
-        self.n, self.k, self.d = config.n, config.k, config.d
-        self.l, self.m = config.l, config.m
-        self.n_data, self.n_stabilizers = 2*self.l*self.m, self.l*self.m # NOTE: stabilizers are split evenly between X and Z, so total stabilizers is 2*l*m
-        self.no_op_index = self.n_data  # Action index for "no operation"
+        if config.code_type == "toric" or config.code_type == "ldpc":
+            self.n, self.k, self.d = config.n, config.k, config.d
+            self.l, self.m = config.l, config.m
+            self.n_data, self.n_stabilizers = 2*self.l*self.m, self.l*self.m # NOTE: stabilizers are split evenly between X and Z, so total stabilizers is 2*l*m
+            self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices_ldpc(config.code_params)
+        elif config.code_type == "surface":
+            self.n, self.k, self.d = config.d**2, 1, config.d
+            self.n_data, self.n_stabilizers = self.d**2, int((self.d**2-1)/2)
+            self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices_surface()
 
-        self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices(config.code_params)
+        self.no_op_index = self.n_data  # Action index for "no operation"
         self.graph, self.data, self.node_to_index = self._init_graph()
 
         self.feature_dim = self.data.x.shape[1]
@@ -53,7 +58,7 @@ class QLDPCCode(gym.Env):
         syndrome_x = (self.x_errors.float().unsqueeze(0) @ self.logical_z_T) % 2
         syndrome_z = (self.z_errors.float().unsqueeze(0) @ self.logical_x_T) % 2
 
-        return syndrome_x.any() or syndrome_z.any()
+        return syndrome_x.any() | syndrome_z.any()
 
 
     def is_error_free(self) -> bool:
@@ -66,15 +71,14 @@ class QLDPCCode(gym.Env):
         self.z_syndrome = ((self.H_z.float() @ self.x_errors.float()) % 2).long()
 
 
-    def update_graph(self, error_rate) -> None:
+    def update_graph(self, llr) -> None:
         # Graph node features are structured as follows:
         # [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome]
-        er = torch.tensor(error_rate, dtype=torch.float32, device=self.data.x.device)
-        llr = torch.log1p(-er + 1e-10) - torch.log(er + 1e-10)
         self.data.x[self.q_idx, 5] = llr
 
         self.data.x[self.x_idx, 3] = self.x_syndrome.float()
         self.data.x[self.z_idx, 4] = self.z_syndrome.float()
+
 
     def flip(self, qubit_index, error_type=1) -> None:
         # error_type = 1: X error
@@ -84,12 +88,12 @@ class QLDPCCode(gym.Env):
         if error_type != 2:
             self.num_x_errors += 1 - 2 * self.x_errors[qubit_index]
             self.x_errors[qubit_index] ^= 1
-            self.z_syndrome ^= self.H_z[:, qubit_index].flatten()
+            self.z_syndrome[self.qubit_to_z[qubit_index]] ^= 1
 
         if error_type != 1:
             self.num_z_errors += 1 - 2 * self.z_errors[qubit_index]
             self.z_errors[qubit_index] ^= 1
-            self.x_syndrome ^= self.H_x[:, qubit_index].flatten()
+            self.x_syndrome[self.qubit_to_x[qubit_index]] ^= 1
 
 
     def flip_randomly(self, error_rate) -> None:
@@ -131,10 +135,8 @@ class QLDPCCode(gym.Env):
         qubit_to_z = {}
 
         for q in range(self.n_data):
-            x_checks = torch.where(self.H_x[:, q] == 1)[0].cpu().numpy()
-            z_checks = torch.where(self.H_z[:, q] == 1)[0].cpu().numpy()
-            qubit_to_x[q] = self.x_idx[x_checks]
-            qubit_to_z[q] = self.z_idx[z_checks]
+            qubit_to_x[q] = torch.where(self.H_x[:, q] == 1)[0]
+            qubit_to_z[q] = torch.where(self.H_z[:, q] == 1)[0]
 
         return qubit_to_x, qubit_to_z
 
@@ -185,7 +187,7 @@ class QLDPCCode(gym.Env):
         return logical_x, logical_x.T.float(), logical_z, logical_z.T.float()
 
 
-    def _init_parity_check_matrices(self, params):
+    def _init_parity_check_matrices_ldpc(self, params):
 
         def __polynomial_to_matrix(terms, x, y, z):
             matrix = np.zeros_like(x @ y @ z, dtype=np.int8)
@@ -218,6 +220,78 @@ class QLDPCCode(gym.Env):
 
         return H_x, H_x_T, H_z, H_z_T
 
+
+    def _init_parity_check_matrices_surface(self):
+        # Sanity check.
+        assert self.d >= 3 and self.d % 2 == 1
+
+        d = self.d
+        n = d * d
+
+        H_x = []
+        H_z = []
+
+        # Bulk plaquettes: checkerboard X/Z pattern.
+        for r in range(d - 1):
+            for c in range(d - 1):
+                q = [
+                    r * d + c,
+                    r * d + c + 1,
+                    (r + 1) * d + c,
+                    (r + 1) * d + c + 1,
+                ]
+
+                row = np.zeros(n, dtype=np.uint8)
+                row[q] = 1
+
+                if (r + c) % 2 == 0:
+                    H_x.append(row)
+                else:
+                    H_z.append(row)
+
+        # X boundary checks
+        for r in range(d - 1):
+            if r % 2 == 1:
+                row = np.zeros(n, dtype=np.uint8)
+                row[r * d] = 1
+                row[(r + 1) * d] = 1
+                H_x.append(row)
+
+            if r % 2 == 0:
+                row = np.zeros(n, dtype=np.uint8)
+                row[r * d + (d - 1)] = 1
+                row[(r + 1) * d + (d - 1)] = 1
+                H_x.append(row)
+
+        # Z boundary checks
+        for c in range(d - 1):
+            if c % 2 == 0:
+                row = np.zeros(n, dtype=np.uint8)
+                row[c] = 1
+                row[c + 1] = 1
+                H_z.append(row)
+
+            if c % 2 == 1:
+                row = np.zeros(n, dtype=np.uint8)
+                row[(d - 1) * d + c] = 1
+                row[(d - 1) * d + c + 1] = 1
+                H_z.append(row)
+
+        H_x = torch.tensor(
+            np.asarray(H_x),
+            dtype=torch.long,
+            device=self.device,
+        )
+        H_z = torch.tensor(
+            np.asarray(H_z),
+            dtype=torch.long,
+            device=self.device,
+        )
+
+        H_x_T = H_x.t().contiguous()
+        H_z_T = H_z.t().contiguous()
+
+        return H_x, H_x_T, H_z, H_z_T
 
     def _init_graph(self):
 
@@ -252,7 +326,6 @@ class QLDPCCode(gym.Env):
 
         node_list = list(G.nodes)
         node_to_index = {n: i for i, n in enumerate(node_list)}
-
         # One-hot encode node types, plus additional feature specific to qubit type.
         # Node features are structured as follows:
         # [is_qubit, is_x_check, is_z_check, x_syndrome, z_syndrome, LLR]
