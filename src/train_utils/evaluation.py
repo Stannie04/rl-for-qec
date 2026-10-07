@@ -2,7 +2,6 @@ from __future__ import annotations
 import time
 import numpy as np
 from tqdm import tqdm
-from prettytable import PrettyTable
 
 from src.agents import SACAgent, CGNNEncoder, RouterAgent
 from src.environment import QLDPCEnv
@@ -10,62 +9,6 @@ from src.read_config import ConfigParser
 from src.train_utils.datasets import create_dataset_from_random_shots,  create_dataset_from_uniform_shots, create_dataset_from_random_shots_labelled
 from src.train_utils.inference import get_agent_and_inference, parallel_inference
 from src.train_utils.plotting import plot_results
-
-
-def benchmark_env(config):
-    start = time.time()
-    env = QLDPCEnv(config)
-
-    if config.verbose:
-        env.render(mode="edge_info")
-
-    agent = SACAgent(env, config)
-    end = time.time()
-    print(f"Initialization took {end - start:.5f} seconds")
-
-    obs, info = env.reset()
-
-    step_times = []
-    agent_times = []
-    buffer_times = []
-    train_times = []
-    loop_times = []
-    for _ in tqdm(range(10_000), desc="Benchmarking environment and agent"):
-
-        loop_start = time.time()
-        action, _ = agent.select_action(obs)
-        end = time.time()
-        agent_times.append(end - loop_start)
-
-        start = time.time()
-        next_obs, reward, terminated, truncated, info = env.step(action)
-        end = time.time()
-        step_times.append(end - start)
-
-        start = time.time()
-        agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
-        end = time.time()
-        buffer_times.append(end - start)
-
-        start = time.time()
-        agent.train_step()
-        loop_end = time.time()
-        train_times.append(loop_end - start)
-
-        obs = next_obs
-        loop_times.append(loop_end - loop_start)
-
-
-    t = PrettyTable(["Component", "Avg Time (s)", "it/s"])
-
-    t.add_row(["Environment Step", f"{np.mean(step_times[1:]):.5f}", f"{1/np.mean(step_times[1:]):.2f}"])
-    t.add_row(["Agent Action Selection", f"{np.mean(agent_times[1:]):.5f}", f"{1/np.mean(agent_times[1:]):.2f}"])
-    t.add_row(["Buffer Push", f"{np.mean(buffer_times[1:]):.5f}", f"{1/np.mean(buffer_times[1:]):.2f}"])
-    t.add_row(["Agent Training Step", f"{np.mean(train_times[1:]):.5f}", f"{1/np.mean(train_times[1:]):.2f}"])
-    t.add_row(["Total Loop", f"{np.mean(loop_times[1:]):.5f}", f"{1/np.mean(loop_times[1:]):.2f}"])
-
-    print(t)
-
 
 
 def evaluate_agent(config: ConfigParser, step, best_model_ler, agent_name=None, checkpoint_dir=None):
