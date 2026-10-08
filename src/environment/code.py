@@ -25,6 +25,7 @@ class QLDPCCode(gym.Env):
             self.n_data, self.n_stabilizers = self.d**2, int((self.d**2-1)/2)
             self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices_surface()
 
+        self.rank_H_x, self.rank_H_z = self._gf2_rank(self.H_x), self._gf2_rank(self.H_z)
         self.no_op_index = self.n_data  # Action index for "no operation"
         self.graph, self.data, self.node_to_index = self._init_graph()
 
@@ -55,10 +56,19 @@ class QLDPCCode(gym.Env):
 
 
     def has_logical_error(self) -> torch.Tensor:
-        syndrome_x = (self.x_errors.float().unsqueeze(0) @ self.logical_z_T) % 2
-        syndrome_z = (self.z_errors.float().unsqueeze(0) @ self.logical_x_T) % 2
+        x_logical_dim = self._logical_support_dimension(
+            self.x_errors != 0,
+            commuting_checks=self.H_z, stabilizers=self.H_x, stabilizer_rank=self.rank_H_x)
 
-        return syndrome_x.any() | syndrome_z.any()
+        z_logical_dim = self._logical_support_dimension(
+            self.z_errors != 0,
+            commuting_checks=self.H_x, stabilizers=self.H_z, stabilizer_rank=self.rank_H_z,)
+
+        return torch.tensor(
+            (x_logical_dim > 0) or (z_logical_dim > 0),
+            dtype=torch.bool,
+            device=self.device,
+        )
 
 
     def is_error_free(self) -> bool:
@@ -129,6 +139,28 @@ class QLDPCCode(gym.Env):
     #
     # Private helper functions for initializing the code structure, calculating logical operators, and rendering the graph.
     #
+
+    def _logical_support_dimension(self,error_support: torch.Tensor,commuting_checks: torch.Tensor,stabilizers: torch.Tensor,stabilizer_rank: int) -> int:
+
+        # Indices where an error is present / absent.
+        support_idx = torch.where(error_support)[0]
+        outside_idx = torch.where(~error_support)[0]
+
+        support_size = int(support_idx.numel())
+
+        if support_size == 0:
+            return 0
+
+        commuting_rank = self._gf2_rank(commuting_checks[:, support_idx])
+
+        normalizer_support_dim = support_size - commuting_rank
+        stabilizer_outside_rank = self._gf2_rank(stabilizers[:, outside_idx])
+
+        stabilizer_support_dim = stabilizer_rank - stabilizer_outside_rank
+        logical_support_dim = normalizer_support_dim - stabilizer_support_dim
+
+        return max(0, logical_support_dim)
+
 
     def _get_connected_checks(self):
         qubit_to_x = {}
