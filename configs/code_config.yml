@@ -59,6 +59,23 @@
 
 
 #
+# Tile codes: planar L x L grid with two qubits per site (see src/environment/tile_code.py).
+#
+
+288_8_12_tile:
+  code_type: tile
+  n: 288
+  k: 8
+  d: 12
+
+  L: 12
+
+  code_params:
+    x_tile: {L: [[1,0],[2,0],[0,2]], R: [[2,1],[2,2],[0,0]]}   # f = x + x^2 + y^2, g = 1 + x^2 y + x^2 y^2
+    z_tile: {L: [[2,2],[0,1],[0,0]], R: [[1,2],[0,2],[2,0]]}   # gbar, fbar (Liang & Chen, arXiv:2504.08887)
+
+
+#
 # Toric codes.
 #
 

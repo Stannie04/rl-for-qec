@@ -6,6 +6,7 @@ from torch_geometric.data import Data
 import torch
 import galois
 from src.read_config import ConfigParser
+from src.environment.tile_code import tile_code_from_params
 from PIL import Image
 import io
 
@@ -24,6 +25,11 @@ class QLDPCCode(gym.Env):
             self.n, self.k, self.d = config.d**2, 1, config.d
             self.n_data, self.n_stabilizers = self.d**2, int((self.d**2-1)/2)
             self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices_surface()
+        elif config.code_type == "tile":
+            self.n, self.k, self.d = config.n, config.k, config.d
+            self.L = config.L
+            self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices_tile(config.code_params)
+            self.n_data, self.n_stabilizers = self.H_x.shape[1], self.H_x.shape[0]
 
         self.rank_H_x, self.rank_H_z = self._gf2_rank(self.H_x), self._gf2_rank(self.H_z)
         self.no_op_index = self.n_data  # Action index for "no operation"
@@ -37,8 +43,10 @@ class QLDPCCode(gym.Env):
 
         self.x_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
         self.z_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
-        self.x_syndrome = torch.zeros(self.n_stabilizers, dtype=torch.long, device=self.device)
-        self.z_syndrome = torch.zeros(self.n_stabilizers, dtype=torch.long, device=self.device)
+        # X and Z checks may differ in number, so size each syndrome by its own matrix:
+        # x_syndrome = H_x @ z_errors (X checks), z_syndrome = H_z @ x_errors (Z checks).
+        self.x_syndrome = torch.zeros(self.H_x.shape[0], dtype=torch.long, device=self.device)
+        self.z_syndrome = torch.zeros(self.H_z.shape[0], dtype=torch.long, device=self.device)
         self.num_x_errors, self.num_z_errors = 0, 0
 
         self.logical_x, self.logical_x_T, self.logical_z, self.logical_z_T = self._get_logical_operators()
@@ -244,6 +252,17 @@ class QLDPCCode(gym.Env):
 
         H_x = np.hstack([A, B])
         H_z = np.hstack([B.T, A.T])
+
+        H_x = torch.tensor(H_x, dtype=torch.long, device=self.device)
+        H_z = torch.tensor(H_z, dtype=torch.long, device=self.device)
+        H_x_T = H_x.t().contiguous()
+        H_z_T = H_z.t().contiguous()
+
+        return H_x, H_x_T, H_z, H_z_T
+
+
+    def _init_parity_check_matrices_tile(self, params):
+        H_x, H_z = tile_code_from_params(self.L, params)
 
         H_x = torch.tensor(H_x, dtype=torch.long, device=self.device)
         H_z = torch.tensor(H_z, dtype=torch.long, device=self.device)
