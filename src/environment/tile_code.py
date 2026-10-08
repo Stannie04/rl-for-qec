@@ -10,7 +10,8 @@ checks of a CSS code.  The tiles for the [[288, 8, 12]] code realize the
 polynomials f = x + x^2 + y^2 and g = 1 + x^2 y + x^2 y^2 (and their duals).
 
 References:
-    - Steffan et al., arXiv:2504.09171 ("Planar tile codes").
+    - Steffan et al., "Tile codes: high-efficiency quantum codes on a lattice
+      with boundary", arXiv:2504.09171.
     - Liang & Chen, arXiv:2504.08887.
 """
 
