@@ -1,6 +1,6 @@
 """RL environment integration test for the [[288, 8, 12]] tile code.
 
-This exercises the `code_type: tile` branch of QLDPCCode, so it needs the full
+This exercises the `code_type: tile` branch of QECCode, so it needs the full
 environment stack (galois/torch/torch_geometric).  It is skipped where galois is
 not installed; run it in the `rl-for-qec` conda environment.
 """
@@ -15,7 +15,7 @@ pytest.importorskip("galois")
 import torch  # noqa: E402
 import yaml  # noqa: E402
 
-from src.environment.code import QLDPCCode  # noqa: E402
+from src.environment.code import QECCode  # noqa: E402
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "code_config.yml"
 CODE_NAME = "288_8_12_tile"
@@ -32,7 +32,7 @@ def tile_config():
 @pytest.fixture(scope="module")
 def code():
     """One shared build: constructing + validating the code is the expensive part."""
-    return QLDPCCode(tile_config(), validate=True)
+    return QECCode(tile_config(), validate=True)
 
 
 def test_dimensions_and_syndrome_buffer_sizes(code):

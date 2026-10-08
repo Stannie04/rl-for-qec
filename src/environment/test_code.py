@@ -1,11 +1,11 @@
 import pytest
 import torch
 
-from src.environment.code import QLDPCCode
+from src.environment.code import QECCode
 
 
 def make_code(Hx, Hz, logical_x, logical_z, k):
-    code = QLDPCCode.__new__(QLDPCCode)
+    code = QECCode.__new__(QECCode)
     code.H_x = torch.tensor(Hx, dtype=torch.float32)
     code.H_z = torch.tensor(Hz, dtype=torch.float32)
     code.logical_x = torch.tensor(logical_x, dtype=torch.float32)

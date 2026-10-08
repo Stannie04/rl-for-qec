@@ -1,7 +1,7 @@
 import optuna
 import numpy as np
 
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.agents import SACAgent
 from src.train_utils import evaluate_agent
 
@@ -33,7 +33,7 @@ def objective(trial: optuna.Trial, config) -> float:
     """
     Objective function for Optuna.
     """
-    env = QLDPCEnv(config)
+    env = QECEnv(config)
 
     # Sample hyperparameters
     hyperparams = sample_sac_params(trial)

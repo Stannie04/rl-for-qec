@@ -11,10 +11,11 @@ from PIL import Image
 import io
 
 
-class QLDPCCode(gym.Env):
+class QECCode(gym.Env):
     def __init__(self, config: ConfigParser, validate=False):
-        super(QLDPCCode, self).__init__()
+        super(QECCode, self).__init__()
         self.device = config.device
+        self.code_type = config.code_type
 
         if config.code_type == "toric" or config.code_type == "ldpc":
             self.n, self.k, self.d = config.n, config.k, config.d

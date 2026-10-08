@@ -4,7 +4,7 @@ import time
 import os
 from wandb import Histogram
 from tqdm import tqdm
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.agents import SACAgent, NeuralBPEncoder, SLAgent
 from src.train_utils import evaluate_agent, CurriculumScheduler, load_shots, create_dataset_from_nonzero_shots, create_dataset_from_curriculum, create_dataset_from_pretrained_encoder_mistakes
 import torch
@@ -85,7 +85,7 @@ def train_rl(config):
 
     try:
         shots = create_dataset_from_curriculum(config, num_samples=config.num_timesteps, noise_model="bit_flip", with_mistakes=False, save=False)
-        env = QLDPCEnv(config, shots)
+        env = QECEnv(config, shots)
         agent = SACAgent(env, config)
 
         single_agent_training_loop(env, agent, config, checkpoint_dir)

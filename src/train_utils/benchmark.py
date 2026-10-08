@@ -6,12 +6,12 @@ import torch
 from tqdm import tqdm
 
 
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.agents import SACAgent
 
 def benchmark_env(config):
     start = perf_counter()
-    env = QLDPCEnv(config)
+    env = QECEnv(config)
 
     if config.verbose:
         env.render(mode="edge_info")

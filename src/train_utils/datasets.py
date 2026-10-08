@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from itertools import combinations
 from math import comb
 
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.train_utils.curriculum import CurriculumScheduler
 from src.train_utils.inference import get_agent_and_inference, parallel_inference
 
@@ -197,7 +197,7 @@ def create_dataset_from_pretrained_encoder_mistakes(config, model, shot_type="un
     # shots = load_shots(config, dataset_type=shot_type, noise_model=noise_model)
     # shots = create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e4), max_error=4, noise_model=noise_model, save=True)
     shots = load_shots(config, dataset_type=shot_type, noise_model=noise_model)
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
     for _ in tqdm(env.shots):
         obs, info = env.reset()
         true_indices = torch.nonzero(env.code.x_errors.float()).flatten()

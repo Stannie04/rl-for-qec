@@ -2,7 +2,7 @@ import time
 from tqdm import tqdm
 import os
 import torch
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.agents import RouterAgent
 from src.train_utils import load_shots, get_agent_and_inference, parallel_inference
 
@@ -89,7 +89,7 @@ def get_decoders(config, env):
 
 def evaluate_moe(config):
     shots = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name="bp")
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
     agent = RouterAgent(config, env, router_checkpoint="checkpoints/evaluate_cps/router.pt")
     expert_list, inference_list = get_decoders(config, env)
 
@@ -98,7 +98,7 @@ def evaluate_moe(config):
 
 def train_moe_rl(config):
     shots = load_shots(config, dataset_type="moe")
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
     agent = RouterAgent(config, env, encoder_checkpoint="checkpoints/evaluate_cps/sl_nbp_big.pt")
     expert_list, inference_list = get_decoders(config, env)
     rl_train_loop(config, env, agent, expert_list, inference_list)

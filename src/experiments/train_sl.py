@@ -1,6 +1,6 @@
 from src.agents import NeuralBPEncoder, SLAgent
 from src.agents.encoders import CGNNEncoder
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.train_utils import create_dataset_from_curriculum, create_dataset_from_uniform_shots, create_dataset_from_pretrained_encoder_mistakes
 import torch
 import torch.nn.functional as F
@@ -20,7 +20,7 @@ def train_sl(config):
 
     shots = create_dataset_from_curriculum(config, config.num_pretrain_timesteps)
 
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
 
     model = SLAgent(config, env).to(config.device)
     opt = torch.optim.Adam(model.parameters(), lr=config.encoder_learning_rate)
@@ -43,7 +43,7 @@ def evaluate_pretrained_encoder(config, model, checkpoint_dir, threshold=None, s
     num_samples_per_error = 1000
     max_error = 4
     shots = create_dataset_from_uniform_shots(config, num_samples_per_error, max_error=max_error)
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
 
     topk_full_counts = [0] * max_error
 

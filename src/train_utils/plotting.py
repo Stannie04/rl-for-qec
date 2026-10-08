@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 import numpy as np
 import torch
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.train_utils.datasets import load_shots
 from src.train_utils.inference import get_agent_and_inference
 from collections import Counter, defaultdict
@@ -99,26 +99,17 @@ def get_confidence_bounds(results, window=100):
 
 
 def render_example_environment(config):
-    env = QLDPCEnv(config)
-
-    for l in env.code.logical_x:
-        initial_x, initial_z = env.code.get_logical_state()
+    env = QECEnv(config)
+    for l in [env.code.logical_x, env.code.logical_z]:
         num = len(torch.argwhere(l == 1).flatten())
         for i, j in enumerate(torch.argwhere(l == 1).flatten()):
             print(f"{i+1} / {num}")
-            env.code.flip(j)
+            env.code.flip(j.item())
             env.code.update_graph(env.curriculum_error_rate)
 
-            current_x, current_z = env.code.get_logical_state()
-            x_changed = not torch.equal(initial_x, current_x)
-            z_changed = not torch.equal(initial_z, current_z)
-            print(f"Flipped qubit {j.item()}: Logical X changed: {x_changed}, Logical Z changed: {z_changed}")
-
-
+            print(f"Flipped qubit {j.item()}: Logical error: {env.code.has_logical_error()}")
             print(f"Error free: {env.code.is_error_free()}\n")
-
         env.render()
-
         env.reset()
 
 
@@ -126,7 +117,7 @@ def render_mistakes(config):
     agent_name = "bp"
 
     mistakes = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name=agent_name)
-    env = QLDPCEnv(config, mistakes)
+    env = QECEnv(config, mistakes)
     agent, _ = get_agent_and_inference(config, env, agent_name)
 
     for idx, shot in enumerate(mistakes):
@@ -137,11 +128,10 @@ def render_mistakes(config):
         error_pred = agent.select_action(obs, evaluate=True)[0]
         print(f"Action: {error_pred}")
         if len(error_pred) > 0:
-            # env.code.render_subgraph()
             env.render()
             for a in error_pred:
                 env.step(a)
-            env.code.render_subgraph()
+            env.render(mode="subgraph")
 
 
 def plot_jaccard_heatmap(agent_names, jaccard):
