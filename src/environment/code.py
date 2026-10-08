@@ -1,14 +1,12 @@
 import gymnasium as gym
 import numpy as np
 import networkx as nx
-import matplotlib.pyplot as plt
 from torch_geometric.data import Data
 import torch
 import galois
 from src.read_config import ConfigParser
 from src.environment.tile_code import tile_code_from_params
-from PIL import Image
-import io
+from src.environment.render_methods import render_ldpc, render_subgraph, render_surface
 
 
 class QECCode(gym.Env):
@@ -103,7 +101,6 @@ class QECCode(gym.Env):
         # error_type = 1: X error
         # error_type = 2: Z error
         # error_type = 3: Y error
-
         if error_type != 2:
             self.num_x_errors += 1 - 2 * self.x_errors[qubit_index]
             self.x_errors[qubit_index] ^= 1
@@ -145,6 +142,14 @@ class QECCode(gym.Env):
         self.z_syndrome.zero_()
         self.num_x_errors, self.num_z_errors = 0, 0
 
+    def render(self, mode="normal"):
+        if mode=="subgraph":
+            render_subgraph(self.graph, self.data, self.node_to_index, x_errors=self.x_errors, z_errors=self.z_errors)
+        else:
+            match self.code_type:
+                case "toric" | "ldpc": render_ldpc(self.graph, self.x_errors, self.z_errors, self.data, self.node_to_index)
+                case "surface": render_surface(self.graph, self.x_errors, self.z_errors, self.data, self.node_to_index, self.d)
+                case _: raise ValueError(f"Unknown code type: {self.code_type}")
     #
     # Private helper functions for initializing the code structure, calculating logical operators, and rendering the graph.
     #
@@ -329,21 +334,13 @@ class QECCode(gym.Env):
                 row[(d - 1) * d + c + 1] = 1
                 H_z.append(row)
 
-        H_x = torch.tensor(
-            np.asarray(H_x),
-            dtype=torch.long,
-            device=self.device,
-        )
-        H_z = torch.tensor(
-            np.asarray(H_z),
-            dtype=torch.long,
-            device=self.device,
-        )
-
+        H_x = torch.tensor(np.asarray(H_x), dtype=torch.long,device=self.device)
+        H_z = torch.tensor(np.asarray(H_z), dtype=torch.long,device=self.device)
         H_x_T = H_x.t().contiguous()
         H_z_T = H_z.t().contiguous()
 
         return H_x, H_x_T, H_z, H_z_T
+
 
     def _init_graph(self):
 
@@ -403,17 +400,6 @@ class QECCode(gym.Env):
         data = Data(x=x, edge_index=edge_index)
 
         return G, data, node_to_index
-
-
-    def _get_edge_information(self):
-        x_check_idx, q_idx_x = torch.where(self.H_x == 1)
-        z_check_idx, q_idx_z = torch.where(self.H_z == 1)
-
-        # Print per qubit index which checks it is connected to
-        for q in range(self.n_data):
-            x_checks = x_check_idx[q_idx_x == q].cpu().numpy()
-            z_checks = z_check_idx[q_idx_z == q].cpu().numpy()
-            print(f"Qubit {q} is connected to X checks {x_checks} and Z checks {z_checks}")
 
 
     @staticmethod
@@ -528,85 +514,6 @@ class QECCode(gym.Env):
         return True
 
 
-    def render(self, mode="human"):
-
-        if mode == "edge_info":
-            self._get_edge_information()
-            return
-
-        # pos = nx.multipartite_layout(self.graph, subset_key="layer")
-        pos = nx.spring_layout(self.graph, seed=42)  # Use a fixed seed for consistent layouts across runs
-
-        # Separate node lists
-        qubits = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "qubit" and self.x_errors[int(n[1:])] == 1]
-        x_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "x_check" and self.data.x[self.node_to_index[n], 3] == 1]
-        z_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 1]
-        qubit_colors = ["orange" if self.x_errors[int(n[1:])] == 1 else "black" for n in qubits]
-        x_check_colors = ["red" if self.data.x[self.node_to_index[n], 3] == 1 else "lightcoral" for n in
-                          x_checks]
-        z_check_colors = ["blue" if self.data.x[self.node_to_index[n], 4] == 1 else "lightblue" for n in
-                          z_checks]
-
-        # Color edges based on whether they are connected to an error qubit or not
-        error_edges = []
-        normal_edges = []
-
-        for u, v in self.graph.edges:
-            # Check if either endpoint is a qubit with error
-            def is_error_qubit(node):
-                return (
-                        self.graph.nodes[node]["node_type"] == "qubit" and
-                        self.x_errors[int(node[1:])] == 1
-                )
-
-            if is_error_qubit(u) or is_error_qubit(v):
-                error_edges.append((u, v))
-            else:
-                normal_edges.append((u, v))
-
-        plt.figure(figsize=(10, 8))
-
-        # Draw edges
-        # Draw normal edges
-        nx.draw_networkx_edges(self.graph, pos,
-                               edgelist=normal_edges,
-                               alpha=0.3)
-
-        # Draw error edges (highlighted)
-        nx.draw_networkx_edges(self.graph, pos,
-                               edgelist=error_edges,
-                               edge_color="red",
-                               width=2.0)
-
-        # Draw nodes by type (different shapes & colors)
-        nx.draw_networkx_nodes(self.graph, pos,
-                               nodelist=qubits,
-                               node_color=qubit_colors,
-                               node_shape="o",
-                               node_size=200,
-                               label="Data qubits")
-
-        nx.draw_networkx_nodes(self.graph, pos,
-                               nodelist=x_checks,
-                               node_color=x_check_colors,
-                               node_shape="s",
-                               node_size=300,
-                               label="X checks")
-
-        nx.draw_networkx_nodes(self.graph, pos,
-                               nodelist=z_checks,
-                               node_color=z_check_colors,
-                               node_shape="^",
-                               node_size=300,
-                               label="Z checks")
-
-        plt.legend(scatterpoints=1)
-        plt.axis("off")
-        plt.title("CSS Tanner Graph (Bicycle Code)")
-
-        plt.show()
-
-
     def number_of_overlapping_stabilizers(self, indices=None):
 
         if indices is None:
@@ -618,85 +525,4 @@ class QECCode(gym.Env):
         num_x_overlaps_one = (x_overlap == 1).sum().item()
         num_x_overlaps_two = (x_overlap == 2).sum().item()
         return (num_x_overlaps_one, num_x_overlaps_two)
-
-
-    def get_subgraph_of_indices(self, indices):
-        # Return the subgraph of the Tanner graph containing only the specified qubit indices and their neighboring checks.
-        nodes_to_include = set()
-        for idx in indices:
-            qubit_node = f"q{idx}"
-            nodes_to_include.add(qubit_node)
-            neighbors = self.graph.neighbors(qubit_node)
-            nodes_to_include.update(neighbors)
-
-        # Filter on only q and z check nodes to simplify visualization
-        nodes_to_include = {n for n in nodes_to_include if self.graph.nodes[n]["node_type"] in ("qubit", "z_check")}
-
-        return self.graph.subgraph(nodes_to_include)
-
-
-    def render_subgraph(self, indices=None, overlap=None, mistakes=None, total=None, with_labels=False, with_title=False):
-
-        if indices is not None:
-            subgraph = self.get_subgraph_of_indices(indices)
-        else:
-            error_indices = torch.where(self.x_errors == 1)[0].tolist()
-            subgraph = self.get_subgraph_of_indices(error_indices)
-
-        qubit_labels = {
-            n: str(int(n[1:]))  # "q17" -> "17"
-            for n in subgraph.nodes
-            if subgraph.nodes[n]["node_type"] == "qubit"
-        }
-
-        pos = nx.spring_layout(subgraph, seed=42)  # Use a fixed seed for consistent layouts across runs
-
-        fig = plt.figure(figsize=(8, 6))
-        # nx.draw(subgraph, pos, with_labels=True, node_color="lightblue", edge_color="gray")
-
-        if with_labels:
-            nx.draw_networkx_labels(
-                subgraph,
-                pos,
-                labels=qubit_labels,
-                font_size=8
-            )
-
-        nx.draw_networkx_nodes(subgraph, pos,
-                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"],
-                               node_color="orange",
-                               node_shape="o",
-                               node_size=200,
-                               label="Data qubits")
-
-        nx.draw_networkx_nodes(subgraph, pos,
-                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 1],
-                               node_color="red",
-                               node_shape="s",
-                               node_size=300,
-                               label="X checks")
-
-        nx.draw_networkx_nodes(subgraph, pos,
-                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 0],
-                               node_color="lightcoral",
-                               node_shape="s",
-                               node_size=300,
-                               label="X checks (no syndrome)")
-
-        nx.draw_networkx_edges(subgraph, pos, edge_color="gray")
-
-        if with_title and overlap is not None and mistakes is not None and total is not None:
-            plt.title(f"Pattern {overlap} (Mistake frequency: {mistakes} / {total}, {100 * mistakes / total:.2f}%)")
-
-        plt.axis("off")
-
-        # plt.show()
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
-        plt.close(fig)
-        buf.seek(0)
-
-        img = Image.open(buf).convert("RGB")
-        return img
 

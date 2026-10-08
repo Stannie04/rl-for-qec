@@ -1,5 +1,5 @@
 from src.experiments import train_rl, optimize_hyperparameters, train_router, train_sl, train_all
-from src.train_utils import benchmark_env, post_train_evaluation, full_analysis, create_all_datasets, render_mistakes
+from src.train_utils import benchmark_env, post_train_evaluation, full_analysis, create_all_datasets, render_mistakes, render_example_environment
 from src.read_config import ConfigParser
 import argparse
 
@@ -27,7 +27,7 @@ def select_experiment(experiment_name):
         case "all": return train_all
         case "benchmark": return benchmark_env
         case "hpo": return optimize_hyperparameters
-        case "render": return render_mistakes
+        case "render": return render_example_environment
         case "evaluate": return post_train_evaluation
         case "analysis": return full_analysis
         case "dataset": return create_all_datasets
