@@ -21,7 +21,7 @@ def train_all(config):
         train_sl(config)
 
         print(f"Training RL agent, repetition {i + 1}/{config.n_repetitions}...")
-        config.hidden_layers_gnn = [32,128,256,512,512,256,256]
+        config.hidden_layers_gnn = [32, 128, 256, 512, 512, 256, 256]
         config.hidden_layers_mlp = [256, 128, 64]
         config.neural_bp_iterations =  8
         config.wandb_run_name = f"rl_rep_{i}"

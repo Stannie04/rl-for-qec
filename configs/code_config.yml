@@ -44,7 +44,7 @@
         B: [[1,0,0], [0,2,0], [0,0,2]] # x+ y^2 + z^2
 
 
-72_4_8:
+72_4_8_ldpc:
     code_type: ldpc
     n: 72
     k: 4
@@ -56,6 +56,23 @@
     code_params:
         A: [[1,0,0], [0,3,0]] # x + y^3
         B: [[2,0,0], [0,1,0], [0,2,0]] # x^2 + y + y^2
+
+
+#
+# Tile codes: planar L x L grid with two qubits per site (see src/environment/tile_code.py).
+#
+
+288_8_12_tile:
+  code_type: tile
+  n: 288
+  k: 8
+  d: 12
+
+  L: 12
+
+  code_params:
+    x_tile: {L: [[1,0],[2,0],[0,2]], R: [[2,1],[2,2],[0,0]]}   # f = x + x^2 + y^2, g = 1 + x^2 y + x^2 y^2
+    z_tile: {L: [[2,2],[0,1],[0,0]], R: [[1,2],[0,2],[2,0]]}   # gbar, fbar (Liang & Chen, arXiv:2504.08887)
 
 
 #
@@ -104,7 +121,7 @@
     B: [[0,0,0], [0,1,0]]   # 1 + y
 
 
-800_2_20:
+800_2_20_toric:
   code_type: toric
   n: 800
   k: 2
@@ -120,16 +137,24 @@
 
 #
 # Surface codes.
+# NOTE: Only the distance is required as the other parameters are automatically determined,
+# but `n`(=d^2) and `k`(=1) are still specified 1) as a sanity check and 2) to remain compatible with the rest of the code.
 #
 
 d3_surface:
   code_type: surface
+  n: 9
+  k: 1
   d: 3
 
 d5_surface:
   code_type: surface
+  n: 25
+  k: 1
   d: 5
 
 d7_surface:
   code_type: surface
+  n: 49
+  k: 1
   d: 7

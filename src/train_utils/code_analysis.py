@@ -1,6 +1,6 @@
 from collections import Counter
 
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 import math
 import numpy as np
 import pandas as pd
@@ -186,9 +186,9 @@ def compute_jaccard_matrix(all_mistakes):
 
 def get_nonzero_overlap_distribution(config, shots):
 
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
 
-    H_z = env.code.H_z.cpu().numpy()
+    H_z = env.code.H.z.cpu().numpy()
     error_matrix = shots[:, 0, :]
 
     overlaps = error_matrix @ H_z.T
@@ -214,8 +214,8 @@ def get_mistake_distribution(config, agents):
     # all_shot_counts = get_nonzero_overlap_distribution(config, all_shots)
 
 
-    env_tmp = QLDPCEnv(config)
-    H_z = env_tmp.code.H_z.detach().cpu().numpy()
+    env_tmp = QECEnv(config)
+    H_z = env_tmp.code.H.z.detach().cpu().numpy()
     H_z_T = H_z.T
 
     all_accuracies = {}
@@ -320,9 +320,9 @@ def get_pattern_frequency(config):
     num_samples = int(1e7)
 
     shots = create_dataset_from_random_shots(config, num_samples=num_samples, error_rate=0.001)
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
 
-    H_z = env.code.H_z.cpu().numpy()
+    H_z = env.code.H.z.cpu().numpy()
     error_matrix = shots[:, 0, :]
 
     overlaps = error_matrix @ H_z.T
@@ -382,7 +382,7 @@ def get_absolute_error_rate(config):
 
 
 def full_analysis(config):
-    env = QLDPCEnv(config)
+    env = QECEnv(config)
     code = env.code
     agents = ["bp", "sl_nbp_big", "sl_tanner_big", "sac_nbp_big",  "sac_tanner_big"]
     print(f"Code Name: {config.code_name}\n")

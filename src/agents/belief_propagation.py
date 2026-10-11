@@ -6,8 +6,8 @@ class BPAgent:
     def __init__(self, env, config):
         self.env = env
 
-        H_z = np.array(env.code.H_z.cpu(), dtype=np.int8)
-        H_x = np.array(env.code.H_x.cpu(), dtype=np.int8)
+        H_z = np.array(env.code.H.z.cpu(), dtype=np.int8)
+        H_x = np.array(env.code.H.x.cpu(), dtype=np.int8)
 
         self.bp_x = ldpc.BpDecoder(H_x, error_rate=env.curriculum_error_rate, max_iter=100)
         self.bp_z = ldpc.BpDecoder(H_z, error_rate=env.curriculum_error_rate, max_iter=100)
@@ -34,8 +34,8 @@ class BPOSDAgent(BPAgent):
     def __init__(self, env, config):
         super().__init__(env, config)
 
-        H_z = np.array(env.code.H_x.cpu(), dtype=np.int8)
-        H_x = np.array(env.code.H_z.cpu(), dtype=np.int8)
+        H_z = np.array(env.code.H.x.cpu(), dtype=np.int8)
+        H_x = np.array(env.code.H.z.cpu(), dtype=np.int8)
 
         self.bp_x = ldpc.BpOsdDecoder(H_z, error_rate=env.curriculum_error_rate, max_iter=100)
         self.bp_z = ldpc.BpOsdDecoder(H_x, error_rate=env.curriculum_error_rate, max_iter=100)

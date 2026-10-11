@@ -24,6 +24,8 @@ class ConfigParser:
                 setattr(self, key, value)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if self.device.type == "cpu":
+            print("WARNING: You are running on a CPU device.")
 
         self.agent_name = agent_name
         self.code_name = code_name
