@@ -100,17 +100,16 @@ def get_confidence_bounds(results, window=100):
 
 def render_example_environment(config):
     env = QECEnv(config)
-    for l in [env.code.logical_x, env.code.logical_z]:
-        num = len(torch.argwhere(l == 1).flatten())
-        for i, j in enumerate(torch.argwhere(l == 1).flatten()):
-            print(f"{i+1} / {num}")
-            env.code.flip(j.item())
-            env.code.update_graph(env.curriculum_error_rate)
+    for type, error in [(env.code.logical_x, 1), (env.code.logical_z, 2)]:
+        for l in type:
+            print(f"Number of qubits: {len(torch.argwhere(l).flatten())}")
 
-            print(f"Flipped qubit {j.item()}: Logical error: {env.code.has_logical_error()}")
-            print(f"Error free: {env.code.is_error_free()}\n")
-        env.render()
-        env.reset()
+            for i, j in enumerate(torch.argwhere(l).flatten()):
+                env.code.flip(j.item(), error)
+                env.code.update_graph(env.curriculum_error_rate)
+
+            env.render()
+            env.reset()
 
 
 def render_mistakes(config):

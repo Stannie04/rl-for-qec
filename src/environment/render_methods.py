@@ -39,28 +39,41 @@ def _get_subgraph_of_indices(graph, indices):
     return graph.subgraph(nodes_to_include)
 
 
+def _is_node_type(graph, node, node_type):
+    return graph.nodes[node]["node_type"] == node_type
+
 def _get_render_groups(graph, x_errors, z_errors, data, node_to_index):
     # Separate node lists
-    qubits = [n for n in graph.nodes if graph.nodes[n]["node_type"] == "qubit"] #and x_errors[int(n[1:])] == 1]
-    x_checks = [n for n in graph.nodes if graph.nodes[n]["node_type"] == "x_check"] #and data.x[node_to_index[n], 3] == 1]
-    z_checks = [n for n in graph.nodes if graph.nodes[n]["node_type"] == "z_check"] #and data.x[node_to_index[n], 4] == 1]
-    qubit_colors = ["orange" if x_errors[int(n[1:])] == 1 else "black" for n in qubits]
+    qubits = [n for n in graph.nodes if _is_node_type(graph, n, "qubit")] #and x_errors[int(n[1:])] == 1]
+    x_checks = [n for n in graph.nodes if _is_node_type(graph, n, "x_check")] #and data.x[node_to_index[n], 3] == 1]
+    z_checks = [n for n in graph.nodes if _is_node_type(graph, n, "z_check")] #and data.x[node_to_index[n], 4] == 1]
+
+    qubit_colors = [
+        "purple" if x_errors[int(n[1:])] and z_errors[int(n[1:])]
+        else "blue" if x_errors[int(n[1:])]
+        else "orange" if z_errors[int(n[1:])]
+        else "black"
+        for n in qubits
+    ]
+
     x_check_colors = ["red" if data.x[node_to_index[n], 3] == 1 else "lightcoral" for n in x_checks]
     z_check_colors = ["blue" if data.x[node_to_index[n], 4] == 1 else "lightblue" for n in z_checks]
 
-    # Color edges based on whether they are connected to an error qubit or not
-    error_edges = []
-    normal_edges = []
+    def get_edge_error(q1, q2):
+        qubit, check = (q1, q2) if _is_node_type(graph, q1, "qubit") else (q2, q1)
+        # Sanity check to ensure homogeneity of the graph.
+        assert _is_node_type(graph, qubit, "qubit") and not _is_node_type(graph, check, "qubit")
 
-    def is_error_qubit(node):
-        return graph.nodes[node]["node_type"] == "qubit" and x_errors[int(node[1:])] == 1
+        qubit_idx = int(qubit[1:])
+        return (
+            1 if x_errors[qubit_idx] and _is_node_type(graph, check, "z_check")
+            else 2 if z_errors[qubit_idx] and _is_node_type(graph, check, "x_check")
+            else 0
+        )
 
+    edge_types = {0: [], 1: [], 2: []}
     for u, v in graph.edges:
-        # Check if either endpoint is a qubit with error
-        if is_error_qubit(u) or is_error_qubit(v):
-            error_edges.append((u, v))
-        else:
-            normal_edges.append((u, v))
+        edge_types[get_edge_error(u, v)].append((u, v))
 
     node_groups = [
         {"nodelist": qubits, "node_color": qubit_colors, "node_shape": "o", "node_size": 200, "label": "Data qubits"},
@@ -69,8 +82,9 @@ def _get_render_groups(graph, x_errors, z_errors, data, node_to_index):
     ]
 
     edge_groups = [
-        {"edgelist": normal_edges, "alpha": 0.3},
-        {"edgelist": error_edges, "edge_color": "red", "width": 2.0}
+        {"edgelist": edge_types[0], "alpha": 0.3}, # No errors
+        {"edgelist": edge_types[1], "edge_color": "blue", "width": 2.0}, # X error
+        {"edgelist": edge_types[2], "edge_color": "red", "width": 2.0}, # Z error
     ]
 
     return node_groups, edge_groups
@@ -121,12 +135,14 @@ def render_subgraph(graph, data, node_to_index, indices=None, x_errors=None, z_e
     z_checks_syndrome = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and data.x[node_to_index[n], 4] == 0]
 
     # Example key-value pair: "q17" -> "17"
-    qubit_labels = {n: str(int(n[1:])) for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"} if with_labels else None
+    # qubit_labels = {n: str(int(n[1:])) for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"} if with_labels else None
 
     node_groups = [
         {"nodelist": qubits, "node_color": "orange", "node_shape": "o", "node_size": 200, "label": "Data qubits"},
         {"nodelist": z_checks, "node_color": "red", "node_shape": "s", "node_size": 300, "label": "Z checks"},
-        {"nodelist": z_checks_syndrome, "node_color": "lightcoral", "node_shape": "s", "node_size": 300, "label": "Z checks (no syndrome)"}
+        {"nodelist": z_checks_syndrome, "node_color": "lightcoral", "node_shape": "s", "node_size": 300, "label": "Z checks (no syndrome)"},
+        {"nodelist": x_checks, "node_color": "blue", "node_shape": "^", "node_size": 300, "label": "X checks"},
+        {"nodelist": x_checks_syndrome, "node_color": "lightblue", "node_shape": "^", "node_size": 300, "label": "X checks (no syndrome)"}
     ]
 
     render_info = RenderInfo(
@@ -139,7 +155,7 @@ def render_subgraph(graph, data, node_to_index, indices=None, x_errors=None, z_e
         figsize=(8, 6),
         edge_groups=None,
         node_groups=node_groups,
-        labels=qubit_labels,
+        labels=None,
         legend=True,
         title=f"Pattern {overlap}" if overlap else None,
         save_path=None
@@ -148,7 +164,7 @@ def render_subgraph(graph, data, node_to_index, indices=None, x_errors=None, z_e
     _draw_graph(render_info)
 
 
-def render_ldpc(graph, x_errors, z_errors, data, node_to_index):
+def render_spring(graph, x_errors, z_errors, data, node_to_index):
 
     node_groups, edge_groups = _get_render_groups(graph, x_errors, z_errors, data, node_to_index)
 
