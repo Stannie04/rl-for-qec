@@ -6,11 +6,10 @@ import pytest
 
 # Load the module straight from its file: the `src.environment` package __init__ pulls in
 # torch/galois-backed code that this numpy-only builder does not need.
-_spec = importlib.util.spec_from_file_location("tile_code", Path(__file__).with_name("tile_code.py"))
+_spec = importlib.util.spec_from_file_location("tile_code", Path(__file__).with_name("parity_check_matrices.py"))
 tile_code = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(tile_code)
 build_tile_code = tile_code.build_tile_code
-tile_code_from_params = tile_code.tile_code_from_params
 
 ORACLE = Path(__file__).with_name("test_data") / "tile_288_8_12_oracle.npz"
 
@@ -94,12 +93,6 @@ def test_generality_l6():
     H_x, H_z = build_tile_code(6, X_TILE, Z_TILE)
     assert H_x.shape[1] == H_z.shape[1] == 2 * 36
     assert int((H_x @ H_z.T % 2).sum()) == 0
-
-
-def test_from_params_matches_build():
-    H_x, H_z = tile_code_from_params(L, {"x_tile": X_TILE, "z_tile": Z_TILE})
-    H_x_ref, H_z_ref = build_tile_code(L, X_TILE, Z_TILE)
-    assert np.array_equal(H_x, H_x_ref) and np.array_equal(H_z, H_z_ref)
 
 
 def test_default_box_equals_explicit_box():

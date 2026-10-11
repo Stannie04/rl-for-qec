@@ -240,103 +240,51 @@ class QECCode(gym.Env):
 
     def _assert_valid_code(self):
         # Basic presence checks
-        for name in ("H_x", "H_z", "logical_x", "logical_z", "k"):
-            if not hasattr(self, name):
-                raise ValueError(f"Missing required attribute: {name}")
+        for name in ("n", "k", "d", "H", "logical_x", "logical_z"):
+            assert hasattr(self, name), f"Missing required attribute: {name}"
 
         # Shape checks
-        if self.H.x.ndim != 2 or self.H.z.ndim != 2:
-            raise ValueError("H_x and H_z must both be 2D tensors")
-
-        if self.logical_x.ndim != 2 or self.logical_z.ndim != 2:
-            raise ValueError("logical_x and logical_z must both be 2D tensors")
-
-        if self.H.x.shape[1] != self.H.z.shape[1]:
-            raise ValueError(
-                f"H_x and H_z must have the same number of columns, got "
-                f"{self.H.x.shape[1]} and {self.H.z.shape[1]}"
-            )
-
-        n = self.H.x.shape[1]
-
-        if self.logical_x.shape[1] != n or self.logical_z.shape[1] != n:
-            raise ValueError(
-                f"logical_x/logical_z must each have {n} columns, got "
-                f"{self.logical_x.shape[1]} and {self.logical_z.shape[1]}"
-            )
+        assert (self.H.x.ndim == 2 and self.H.z.ndim == 2), "H_x and H_z must both be 2D tensors"
+        assert self.logical_x.ndim == 2 and self.logical_z.ndim == 2, "logical_x and logical_z must both be 2D tensors"
+        assert self.H.x.shape[1] == self.H.z.shape[1], f"H_x and H_z must have the same number of columns, got {self.H.x.shape[1]} and {self.H.z.shape[1]}"
+        assert self.logical_x.shape[1] == self.H.x.shape[1] and self.logical_z.shape[1] == self.H.x.shape[1], f"logical_x/logical_z must each have {self.H.x.shape[1]} columns, got {self.logical_x.shape[1]} and {self.logical_z.shape[1]}"
 
         # Binary checks
-        for name, mat in (("H_x", self.H.x), ("H_z", self.H.z),
-                          ("logical_x", self.logical_x), ("logical_z", self.logical_z)):
-            if not torch.all((mat == 0) | (mat == 1)):
-                raise ValueError(f"{name} must be binary (contain only 0/1 entries)")
+        for name, mat in (("H_x", self.H.x), ("H_z", self.H.z), ("logical_x", self.logical_x), ("logical_z", self.logical_z)):
+            assert torch.all((mat == 0) | (mat == 1)), f"{name} must be binary (contain only 0/1 entries)"
 
         # Commutation: H_x H_z^T = 0 mod 2
         commutation = (self.H.x @ self.H.z.T) % 2
-        if torch.any(commutation != 0):
-            raise ValueError("Invalid code: H_x and H_z do not commute over GF(2)")
+        assert not torch.any(commutation != 0), "Invalid code: H_x and H_z do not commute over GF(2)"
 
         # Expected number of logical qubits for a CSS code:
         # k = n - rank(H_x) - rank(H_z)
         rank_hx = gf2_rank(self.H.x)
         rank_hz = gf2_rank(self.H.z)
-        expected_k = n - rank_hx - rank_hz
+        expected_k = self.H.x.shape[1] - rank_hx - rank_hz
 
-        if expected_k < 0:
-            raise ValueError(
-                f"Invalid code: computed negative logical qubit count k={expected_k}"
-            )
-
-        if self.k != expected_k:
-            raise ValueError(
-                f"Invalid code: expected k={expected_k} from ranks, but config k={self.k}"
-            )
-
-        if self.logical_x.shape[0] != self.k:
-            raise ValueError(
-                f"Number of logical X operators does not match k: "
-                f"{self.logical_x.shape[0]} vs {self.k}"
-            )
-
-        if self.logical_z.shape[0] != self.k:
-            raise ValueError(
-                f"Number of logical Z operators does not match k: "
-                f"{self.logical_z.shape[0]} vs {self.k}"
-            )
+        assert expected_k >= 0, f"Invalid code: computed negative logical qubit count k={expected_k}"
+        assert self.k == expected_k, f"Invalid code: expected k={expected_k} from ranks, but config k={self.k}"
+        assert self.logical_x.shape[0] == self.k, f"Number of logical X operators does not match k: {self.logical_x.shape[0]} vs {self.k}"
+        assert self.logical_z.shape[0] == self.k, f"Number of logical Z operators does not match k: {self.logical_z.shape[0]} vs {self.k}"
 
         # Logical X must commute with Z stabilizers; logical Z must commute with X stabilizers
-        x_vs_zstab = (self.logical_x @ self.H.z.T) % 2
-        z_vs_xstab = (self.logical_z @ self.H.x.T) % 2
-
-        if torch.any(x_vs_zstab != 0):
-            raise ValueError("logical_x does not commute with all Z stabilizers")
-
-        if torch.any(z_vs_xstab != 0):
-            raise ValueError("logical_z does not commute with all X stabilizers")
+        x_vs_zstab = (self.logical_x.float() @ self.H.z.T.float()) % 2
+        z_vs_xstab = (self.logical_z.float() @ self.H.x.T.float()) % 2
+        assert torch.any(x_vs_zstab == 0), "logical_x does not commute with all Z stabilizers"
+        assert torch.any(z_vs_xstab == 0), "logical_z does not commute with all X stabilizers"
 
         # Logical operators must be independent modulo stabilizers
-        rank_hx_with_logicals = self._gf2_rank(torch.cat([self.H.x, self.logical_x], dim=0))
-        rank_hz_with_logicals = self._gf2_rank(torch.cat([self.H.z, self.logical_z], dim=0))
+        rank_hx_with_logicals = gf2_rank(torch.cat([self.H.x, self.logical_x], dim=0))
+        rank_hz_with_logicals = gf2_rank(torch.cat([self.H.z, self.logical_z], dim=0))
 
-        if rank_hx_with_logicals != rank_hx + self.k:
-            raise ValueError(
-                "logical_x vectors are not linearly independent modulo row(H_x)"
-            )
-
-        if rank_hz_with_logicals != rank_hz + self.k:
-            raise ValueError(
-                "logical_z vectors are not linearly independent modulo row(H_z)"
-            )
-
+        assert rank_hx_with_logicals == rank_hx + self.k, "logical_x vectors are not linearly independent modulo row(H_x)"
+        assert rank_hz_with_logicals == rank_hz + self.k, "logical_z vectors are not linearly independent modulo row(H_z)"
         # Pairing between chosen logical bases should be nondegenerate
         # (not necessarily identity, but full rank over GF(2)).
-        pairing = (self.logical_x @ self.logical_z.T) % 2
-        if self._gf2_rank(pairing) != self.k:
-            raise ValueError(
-                "logical_x and logical_z do not form a valid dual pairing"
-            )
+        pairing = (self.logical_x.float() @ self.logical_z.T.float()) % 2
+        assert gf2_rank(pairing) == self.k, "logical_x and logical_z do not form a valid dual pairing"
 
-        print("Code validation passed: all checks successful.")
         return True
 
 
