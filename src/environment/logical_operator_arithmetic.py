@@ -2,21 +2,22 @@ import torch
 import galois
 import numpy as np
 
+GF2 = galois.GF(2)
+
 def gf2_rank(mat: torch.Tensor) -> int:
     """Rank over GF(2)."""
-    arr = mat.detach().to("cpu").numpy().astype(np.int8, copy=False)
+    arr = mat.detach().cpu().numpy().astype(np.int8, copy=False)
     if arr.size == 0:
         return 0
-    GF2 = galois.GF(2)
     return GF2(arr).row_space().shape[0]
 
 
 def gf2_inverse(matrix: np.ndarray) -> np.ndarray:
-    A = galois.GF(2)(matrix)
+    A = GF2(matrix)
     return np.asarray(np.linalg.inv(A), dtype=np.int8)
 
 
-def _quotient_basis(GF2, null_space, row_space):
+def _quotient_basis(null_space, row_space):
     current = GF2(row_space).row_space()
     logicals = []
 
@@ -73,12 +74,11 @@ def logical_support_dimension(error_support: torch.Tensor, commuting_checks: tor
 
 
 def get_logical_operators(H_x, H_z, n_data, k, device):
-    GF2 = galois.GF(2)
 
     Hx = GF2(H_x.detach().cpu().numpy())
     Hz = GF2(H_z.detach().cpu().numpy())
 
-    logical_z = torch.as_tensor(_quotient_basis(GF2, Hx.null_space(), Hz.row_space()), dtype=torch.long, device=device)
-    logical_x = torch.as_tensor(_quotient_basis(GF2, Hz.null_space(), Hx.row_space()), dtype=torch.long, device=device)
+    logical_z = torch.as_tensor(_quotient_basis(Hx.null_space(), Hz.row_space()), dtype=torch.long, device=device)
+    logical_x = torch.as_tensor(_quotient_basis(Hz.null_space(), Hx.row_space()), dtype=torch.long, device=device)
 
     return _pair_logical_bases(logical_x, logical_z, n_data, k, device)
