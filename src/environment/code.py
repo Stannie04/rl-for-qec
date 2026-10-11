@@ -1,47 +1,54 @@
 import gymnasium as gym
-import numpy as np
 import networkx as nx
-import matplotlib.pyplot as plt
 from torch_geometric.data import Data
 import torch
-import galois
 from src.read_config import ConfigParser
-from PIL import Image
-import io
+from src.environment.parity_check_matrices import ParityCheckMatrices
+from src.environment.render_methods import render_spring, render_subgraph, render_surface
+from src.environment.logical_operator_arithmetic import get_logical_operators, logical_support_dimension, gf2_rank
 
 
-class QLDPCCode(gym.Env):
+class QECCode(gym.Env):
     def __init__(self, config: ConfigParser, validate=False):
-        super(QLDPCCode, self).__init__()
+        super(QECCode, self).__init__()
         self.device = config.device
+        self.code_type = config.code_type
 
         if config.code_type == "toric" or config.code_type == "ldpc":
             self.n, self.k, self.d = config.n, config.k, config.d
             self.l, self.m = config.l, config.m
             self.n_data, self.n_stabilizers = 2*self.l*self.m, self.l*self.m # NOTE: stabilizers are split evenly between X and Z, so total stabilizers is 2*l*m
-            self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices_ldpc(config.code_params)
+            self.H = ParityCheckMatrices("ldpc", l=self.l, m=self.m, code_params=config.code_params, device=self.device)
+
         elif config.code_type == "surface":
             self.n, self.k, self.d = config.d**2, 1, config.d
             self.n_data, self.n_stabilizers = self.d**2, int((self.d**2-1)/2)
-            self.H_x, self.H_x_T, self.H_z, self.H_z_T = self._init_parity_check_matrices_surface()
+            self.H = ParityCheckMatrices("surface", d=self.d, device=self.device)
 
-        self.rank_H_x, self.rank_H_z = self._gf2_rank(self.H_x), self._gf2_rank(self.H_z)
+        elif config.code_type == "tile":
+            self.n, self.k, self.d = config.n, config.k, config.d
+            self.L = config.L # Size of the tile code in terms of number of tiles (L x L)
+            self.H = ParityCheckMatrices("tile", L=self.L, code_params=config.code_params, device=self.device)
+            self.n_data, self.n_stabilizers = self.H.x.shape[1], self.H.x.shape[0]
+
         self.no_op_index = self.n_data  # Action index for "no operation"
         self.graph, self.data, self.node_to_index = self._init_graph()
 
         self.feature_dim = self.data.x.shape[1]
 
         self.q_idx = torch.tensor([self.node_to_index[f"q{q}"] for q in range(self.n_data)], dtype=torch.long, device=self.device)
-        self.x_idx = torch.tensor([self.node_to_index[f"x{i}"] for i in range(self.H_x.shape[0])], dtype=torch.long, device=self.device)
-        self.z_idx = torch.tensor([self.node_to_index[f"z{i}"] for i in range(self.H_z.shape[0])], dtype=torch.long, device=self.device)
+        self.x_idx = torch.tensor([self.node_to_index[f"x{i}"] for i in range(self.H.x.shape[0])], dtype=torch.long, device=self.device)
+        self.z_idx = torch.tensor([self.node_to_index[f"z{i}"] for i in range(self.H.z.shape[0])], dtype=torch.long, device=self.device)
 
         self.x_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
         self.z_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
-        self.x_syndrome = torch.zeros(self.n_stabilizers, dtype=torch.long, device=self.device)
-        self.z_syndrome = torch.zeros(self.n_stabilizers, dtype=torch.long, device=self.device)
+        # X and Z checks may differ in number, so size each syndrome by its own matrix:
+        # x_syndrome = H_x @ z_errors (X checks), z_syndrome = H_z @ x_errors (Z checks).
+        self.x_syndrome = torch.zeros(self.H.x.shape[0], dtype=torch.long, device=self.device)
+        self.z_syndrome = torch.zeros(self.H.z.shape[0], dtype=torch.long, device=self.device)
         self.num_x_errors, self.num_z_errors = 0, 0
 
-        self.logical_x, self.logical_x_T, self.logical_z, self.logical_z_T = self._get_logical_operators()
+        self.logical_x, self.logical_x_T, self.logical_z, self.logical_z_T = get_logical_operators(self.H.x, self.H.z, self.n_data, self.k, self.device)
         self.qubit_to_x, self.qubit_to_z = self._get_connected_checks()
 
         if validate:
@@ -56,19 +63,15 @@ class QLDPCCode(gym.Env):
 
 
     def has_logical_error(self) -> torch.Tensor:
-        x_logical_dim = self._logical_support_dimension(
+        x_logical_dim = logical_support_dimension(
             self.x_errors != 0,
-            commuting_checks=self.H_z, stabilizers=self.H_x, stabilizer_rank=self.rank_H_x)
+            commuting_checks=self.H.z, stabilizers=self.H.x, stabilizer_rank=self.H.x_rank)
 
-        z_logical_dim = self._logical_support_dimension(
+        z_logical_dim = logical_support_dimension(
             self.z_errors != 0,
-            commuting_checks=self.H_x, stabilizers=self.H_z, stabilizer_rank=self.rank_H_z,)
+            commuting_checks=self.H.x, stabilizers=self.H.z, stabilizer_rank=self.H.z_rank)
 
-        return torch.tensor(
-            (x_logical_dim > 0) or (z_logical_dim > 0),
-            dtype=torch.bool,
-            device=self.device,
-        )
+        return torch.tensor((x_logical_dim > 0) or (z_logical_dim > 0),dtype=torch.bool,device=self.device)
 
 
     def is_error_free(self) -> bool:
@@ -77,8 +80,8 @@ class QLDPCCode(gym.Env):
 
     def reset_syndrome(self) -> None:
 
-        self.x_syndrome = ((self.H_x.float() @ self.z_errors.float()) % 2).long()
-        self.z_syndrome = ((self.H_z.float() @ self.x_errors.float()) % 2).long()
+        self.x_syndrome = ((self.H.x.float() @ self.z_errors.float()) % 2).long()
+        self.z_syndrome = ((self.H.z.float() @ self.x_errors.float()) % 2).long()
 
 
     def update_graph(self, llr) -> None:
@@ -94,7 +97,6 @@ class QLDPCCode(gym.Env):
         # error_type = 1: X error
         # error_type = 2: Z error
         # error_type = 3: Y error
-
         if error_type != 2:
             self.num_x_errors += 1 - 2 * self.x_errors[qubit_index]
             self.x_errors[qubit_index] ^= 1
@@ -115,7 +117,9 @@ class QLDPCCode(gym.Env):
 
 
     def flip_set_number_of_qubits(self, num_flips) -> None:
-        self.flip(torch.randperm(self.n_data, device=self.device)[:num_flips])
+        indices = torch.randperm(self.n_data, device=self.device)[:num_flips]
+        for index in indices.tolist():
+            self.flip(index)
 
 
     def set_error_pattern(self, error_pattern_x, error_pattern_z) -> None:
@@ -136,194 +140,43 @@ class QLDPCCode(gym.Env):
         self.z_syndrome.zero_()
         self.num_x_errors, self.num_z_errors = 0, 0
 
+
+    def get_number_of_overlapping_stabilizers(self, indices=None):
+
+        if indices is None:
+            indices = torch.where(self.x_errors == 1)[0].tolist()
+
+        x_overlap = self.H.z[:, indices].sum(axis=1)
+
+        # Count the number of times 2 occurs in the array
+        num_x_overlaps_one = (x_overlap == 1).sum().item()
+        num_x_overlaps_two = (x_overlap == 2).sum().item()
+        return (num_x_overlaps_one, num_x_overlaps_two)
+
+
+
+    def render(self, mode="normal"):
+        if mode=="subgraph":
+            render_subgraph(self.graph, self.data, self.node_to_index, x_errors=self.x_errors, z_errors=self.z_errors)
+        else:
+            match self.code_type:
+                case "toric" | "ldpc"| "tile": render_spring(self.graph, self.x_errors, self.z_errors, self.data, self.node_to_index)
+                case "surface": render_surface(self.graph, self.x_errors, self.z_errors, self.data, self.node_to_index, self.d)
+                case _: raise ValueError(f"Unknown code type: {self.code_type}")
     #
     # Private helper functions for initializing the code structure, calculating logical operators, and rendering the graph.
     #
-
-    def _logical_support_dimension(self,error_support: torch.Tensor,commuting_checks: torch.Tensor,stabilizers: torch.Tensor,stabilizer_rank: int) -> int:
-
-        # Indices where an error is present / absent.
-        support_idx = torch.where(error_support)[0]
-        outside_idx = torch.where(~error_support)[0]
-
-        support_size = int(support_idx.numel())
-
-        if support_size == 0:
-            return 0
-
-        commuting_rank = self._gf2_rank(commuting_checks[:, support_idx])
-
-        normalizer_support_dim = support_size - commuting_rank
-        stabilizer_outside_rank = self._gf2_rank(stabilizers[:, outside_idx])
-
-        stabilizer_support_dim = stabilizer_rank - stabilizer_outside_rank
-        logical_support_dim = normalizer_support_dim - stabilizer_support_dim
-
-        return max(0, logical_support_dim)
-
 
     def _get_connected_checks(self):
         qubit_to_x = {}
         qubit_to_z = {}
 
         for q in range(self.n_data):
-            qubit_to_x[q] = torch.where(self.H_x[:, q] == 1)[0]
-            qubit_to_z[q] = torch.where(self.H_z[:, q] == 1)[0]
+            qubit_to_x[q] = torch.where(self.H.x[:, q] == 1)[0]
+            qubit_to_z[q] = torch.where(self.H.z[:, q] == 1)[0]
 
         return qubit_to_x, qubit_to_z
 
-
-    def _get_logical_operators(self):
-        # The logical operators can be derived from parity check matrices as
-        # a basis for the kernel of H_x and H_z.
-
-        GF2 = galois.GF(2)
-
-        def quotient_basis(null_space, row_space):
-            """
-            Return a basis for null_space modulo row_space.
-            Keeps nullspace vectors that are independent of the stabilizers.
-            """
-            GF2 = galois.GF(2)
-            null_space = GF2(np.atleast_2d(np.array(null_space, dtype=int)))
-            row_space = GF2(np.atleast_2d(np.array(row_space, dtype=int)))
-
-            if row_space.size == 0:
-                return null_space
-
-            current = row_space.copy()
-            current_rank = current.row_space().shape[0] if current.ndim == 2 else 0
-            logicals = []
-
-            for v in null_space:
-                candidate = np.vstack([current, v])
-                new_rank = GF2(candidate).row_space().shape[0]
-                if new_rank > current_rank:
-                    logicals.append(v)
-                    current = candidate
-                    current_rank = new_rank
-
-            if len(logicals) == 0:
-                return GF2.Zeros((0, null_space.shape[1]))
-
-            return GF2(np.vstack(logicals))
-
-        H_x_gf2 = GF2(self.H_x.cpu().numpy().astype(np.int8))
-        H_z_gf2 = GF2(self.H_z.cpu().numpy().astype(np.int8))
-
-        # logical Z = ker(H_x) / row(H_z)
-        # logical X = ker(H_z) / row(H_x)
-        logical_z = torch.tensor(quotient_basis(H_x_gf2.null_space(), H_z_gf2.row_space()), dtype=torch.long, device=self.device)
-        logical_x = torch.tensor(quotient_basis(H_z_gf2.null_space(), H_x_gf2.row_space()), dtype=torch.long, device=self.device)
-
-        return logical_x, logical_x.T.float(), logical_z, logical_z.T.float()
-
-
-    def _init_parity_check_matrices_ldpc(self, params):
-
-        def __polynomial_to_matrix(terms, x, y, z):
-            matrix = np.zeros_like(x @ y @ z, dtype=np.int8)
-            for x_exp, y_exp, z_exp in terms:
-                term_matrix = np.linalg.matrix_power(x, x_exp) @ np.linalg.matrix_power(y, y_exp) @ np.linalg.matrix_power(z, z_exp)
-                matrix = (matrix + term_matrix) % 2
-
-            return matrix
-
-        I_l = np.eye(self.l, dtype=np.int8)
-        I_m = np.eye(self.m, dtype=np.int8)
-
-        S_l = np.roll(I_l, 1, axis=1)
-        S_m = np.roll(I_m, 1, axis=1)
-
-        x = np.kron(S_l, I_m)
-        y = np.kron(I_l, S_m)
-        z = np.kron(S_l, S_m)
-
-        A = __polynomial_to_matrix(params["A"], x, y, z)
-        B = __polynomial_to_matrix(params["B"], x, y, z)
-
-        H_x = np.hstack([A, B])
-        H_z = np.hstack([B.T, A.T])
-
-        H_x = torch.tensor(H_x, dtype=torch.long, device=self.device)
-        H_z = torch.tensor(H_z, dtype=torch.long, device=self.device)
-        H_x_T = H_x.t().contiguous()
-        H_z_T = H_z.t().contiguous()
-
-        return H_x, H_x_T, H_z, H_z_T
-
-
-    def _init_parity_check_matrices_surface(self):
-        # Sanity check.
-        assert self.d >= 3 and self.d % 2 == 1
-
-        d = self.d
-        n = d * d
-
-        H_x = []
-        H_z = []
-
-        # Bulk plaquettes: checkerboard X/Z pattern.
-        for r in range(d - 1):
-            for c in range(d - 1):
-                q = [
-                    r * d + c,
-                    r * d + c + 1,
-                    (r + 1) * d + c,
-                    (r + 1) * d + c + 1,
-                ]
-
-                row = np.zeros(n, dtype=np.uint8)
-                row[q] = 1
-
-                if (r + c) % 2 == 0:
-                    H_x.append(row)
-                else:
-                    H_z.append(row)
-
-        # X boundary checks
-        for r in range(d - 1):
-            if r % 2 == 1:
-                row = np.zeros(n, dtype=np.uint8)
-                row[r * d] = 1
-                row[(r + 1) * d] = 1
-                H_x.append(row)
-
-            if r % 2 == 0:
-                row = np.zeros(n, dtype=np.uint8)
-                row[r * d + (d - 1)] = 1
-                row[(r + 1) * d + (d - 1)] = 1
-                H_x.append(row)
-
-        # Z boundary checks
-        for c in range(d - 1):
-            if c % 2 == 0:
-                row = np.zeros(n, dtype=np.uint8)
-                row[c] = 1
-                row[c + 1] = 1
-                H_z.append(row)
-
-            if c % 2 == 1:
-                row = np.zeros(n, dtype=np.uint8)
-                row[(d - 1) * d + c] = 1
-                row[(d - 1) * d + c + 1] = 1
-                H_z.append(row)
-
-        H_x = torch.tensor(
-            np.asarray(H_x),
-            dtype=torch.long,
-            device=self.device,
-        )
-        H_z = torch.tensor(
-            np.asarray(H_z),
-            dtype=torch.long,
-            device=self.device,
-        )
-
-        H_x_T = H_x.t().contiguous()
-        H_z_T = H_z.t().contiguous()
-
-        return H_x, H_x_T, H_z, H_z_T
 
     def _init_graph(self):
 
@@ -331,8 +184,8 @@ class QLDPCCode(gym.Env):
 
         G = nx.Graph()
 
-        n_x, n_qubits = self.H_x.shape
-        n_z, _ = self.H_z.shape
+        n_x, n_qubits = self.H.x.shape
+        n_z, _ = self.H.z.shape
 
         for q in range(n_qubits):
             G.add_node(f"q{q}", node_type="qubit", layer=1)
@@ -345,12 +198,12 @@ class QLDPCCode(gym.Env):
 
         for i in range(n_x):
             for j in range(n_qubits):
-                if self.H_x[i, j] == 1:
+                if self.H.x[i, j] == 1:
                     G.add_edge(f"x{i}", f"q{j}")
 
         for i in range(n_z):
             for j in range(n_qubits):
-                if self.H_z[i, j] == 1:
+                if self.H.z[i, j] == 1:
                     G.add_edge(f"z{i}", f"q{j}")
 
 
@@ -385,298 +238,53 @@ class QLDPCCode(gym.Env):
         return G, data, node_to_index
 
 
-    def _get_edge_information(self):
-        x_check_idx, q_idx_x = torch.where(self.H_x == 1)
-        z_check_idx, q_idx_z = torch.where(self.H_z == 1)
-
-        # Print per qubit index which checks it is connected to
-        for q in range(self.n_data):
-            x_checks = x_check_idx[q_idx_x == q].cpu().numpy()
-            z_checks = z_check_idx[q_idx_z == q].cpu().numpy()
-            print(f"Qubit {q} is connected to X checks {x_checks} and Z checks {z_checks}")
-
-
-    @staticmethod
-    def _gf2_rank(mat: torch.Tensor) -> int:
-        """Rank over GF(2)."""
-        arr = mat.detach().to("cpu").numpy().astype(np.int8, copy=False)
-        if arr.size == 0:
-            return 0
-        GF2 = galois.GF(2)
-        return GF2(arr).row_space().shape[0]
-
-
     def _assert_valid_code(self):
         # Basic presence checks
-        for name in ("H_x", "H_z", "logical_x", "logical_z", "k"):
-            if not hasattr(self, name):
-                raise ValueError(f"Missing required attribute: {name}")
+        for name in ("n", "k", "d", "H", "logical_x", "logical_z"):
+            assert hasattr(self, name), f"Missing required attribute: {name}"
 
         # Shape checks
-        if self.H_x.ndim != 2 or self.H_z.ndim != 2:
-            raise ValueError("H_x and H_z must both be 2D tensors")
-
-        if self.logical_x.ndim != 2 or self.logical_z.ndim != 2:
-            raise ValueError("logical_x and logical_z must both be 2D tensors")
-
-        if self.H_x.shape[1] != self.H_z.shape[1]:
-            raise ValueError(
-                f"H_x and H_z must have the same number of columns, got "
-                f"{self.H_x.shape[1]} and {self.H_z.shape[1]}"
-            )
-
-        n = self.H_x.shape[1]
-
-        if self.logical_x.shape[1] != n or self.logical_z.shape[1] != n:
-            raise ValueError(
-                f"logical_x/logical_z must each have {n} columns, got "
-                f"{self.logical_x.shape[1]} and {self.logical_z.shape[1]}"
-            )
+        assert (self.H.x.ndim == 2 and self.H.z.ndim == 2), "H_x and H_z must both be 2D tensors"
+        assert self.logical_x.ndim == 2 and self.logical_z.ndim == 2, "logical_x and logical_z must both be 2D tensors"
+        assert self.H.x.shape[1] == self.H.z.shape[1], f"H_x and H_z must have the same number of columns, got {self.H.x.shape[1]} and {self.H.z.shape[1]}"
+        assert self.logical_x.shape[1] == self.H.x.shape[1] and self.logical_z.shape[1] == self.H.x.shape[1], f"logical_x/logical_z must each have {self.H.x.shape[1]} columns, got {self.logical_x.shape[1]} and {self.logical_z.shape[1]}"
 
         # Binary checks
-        for name, mat in (("H_x", self.H_x), ("H_z", self.H_z),
-                          ("logical_x", self.logical_x), ("logical_z", self.logical_z)):
-            if not torch.all((mat == 0) | (mat == 1)):
-                raise ValueError(f"{name} must be binary (contain only 0/1 entries)")
+        for name, mat in (("H_x", self.H.x), ("H_z", self.H.z), ("logical_x", self.logical_x), ("logical_z", self.logical_z)):
+            assert torch.all((mat == 0) | (mat == 1)), f"{name} must be binary (contain only 0/1 entries)"
 
         # Commutation: H_x H_z^T = 0 mod 2
-        commutation = (self.H_x @ self.H_z.T) % 2
-        if torch.any(commutation != 0):
-            raise ValueError("Invalid code: H_x and H_z do not commute over GF(2)")
+        commutation = (self.H.x @ self.H.z.T) % 2
+        assert not torch.any(commutation != 0), "Invalid code: H_x and H_z do not commute over GF(2)"
 
         # Expected number of logical qubits for a CSS code:
         # k = n - rank(H_x) - rank(H_z)
-        rank_hx = self._gf2_rank(self.H_x)
-        rank_hz = self._gf2_rank(self.H_z)
-        expected_k = n - rank_hx - rank_hz
+        rank_hx = gf2_rank(self.H.x)
+        rank_hz = gf2_rank(self.H.z)
+        expected_k = self.H.x.shape[1] - rank_hx - rank_hz
 
-        if expected_k < 0:
-            raise ValueError(
-                f"Invalid code: computed negative logical qubit count k={expected_k}"
-            )
-
-        if self.k != expected_k:
-            raise ValueError(
-                f"Invalid code: expected k={expected_k} from ranks, but config k={self.k}"
-            )
-
-        if self.logical_x.shape[0] != self.k:
-            raise ValueError(
-                f"Number of logical X operators does not match k: "
-                f"{self.logical_x.shape[0]} vs {self.k}"
-            )
-
-        if self.logical_z.shape[0] != self.k:
-            raise ValueError(
-                f"Number of logical Z operators does not match k: "
-                f"{self.logical_z.shape[0]} vs {self.k}"
-            )
+        assert expected_k >= 0, f"Invalid code: computed negative logical qubit count k={expected_k}"
+        assert self.k == expected_k, f"Invalid code: expected k={expected_k} from ranks, but config k={self.k}"
+        assert self.logical_x.shape[0] == self.k, f"Number of logical X operators does not match k: {self.logical_x.shape[0]} vs {self.k}"
+        assert self.logical_z.shape[0] == self.k, f"Number of logical Z operators does not match k: {self.logical_z.shape[0]} vs {self.k}"
 
         # Logical X must commute with Z stabilizers; logical Z must commute with X stabilizers
-        x_vs_zstab = (self.logical_x @ self.H_z.T) % 2
-        z_vs_xstab = (self.logical_z @ self.H_x.T) % 2
-
-        if torch.any(x_vs_zstab != 0):
-            raise ValueError("logical_x does not commute with all Z stabilizers")
-
-        if torch.any(z_vs_xstab != 0):
-            raise ValueError("logical_z does not commute with all X stabilizers")
+        x_vs_zstab = (self.logical_x.float() @ self.H.z.T.float()) % 2
+        z_vs_xstab = (self.logical_z.float() @ self.H.x.T.float()) % 2
+        assert torch.any(x_vs_zstab == 0), "logical_x does not commute with all Z stabilizers"
+        assert torch.any(z_vs_xstab == 0), "logical_z does not commute with all X stabilizers"
 
         # Logical operators must be independent modulo stabilizers
-        rank_hx_with_logicals = self._gf2_rank(torch.cat([self.H_x, self.logical_x], dim=0))
-        rank_hz_with_logicals = self._gf2_rank(torch.cat([self.H_z, self.logical_z], dim=0))
+        rank_hx_with_logicals = gf2_rank(torch.cat([self.H.x, self.logical_x], dim=0))
+        rank_hz_with_logicals = gf2_rank(torch.cat([self.H.z, self.logical_z], dim=0))
 
-        if rank_hx_with_logicals != rank_hx + self.k:
-            raise ValueError(
-                "logical_x vectors are not linearly independent modulo row(H_x)"
-            )
-
-        if rank_hz_with_logicals != rank_hz + self.k:
-            raise ValueError(
-                "logical_z vectors are not linearly independent modulo row(H_z)"
-            )
-
+        assert rank_hx_with_logicals == rank_hx + self.k, "logical_x vectors are not linearly independent modulo row(H_x)"
+        assert rank_hz_with_logicals == rank_hz + self.k, "logical_z vectors are not linearly independent modulo row(H_z)"
         # Pairing between chosen logical bases should be nondegenerate
         # (not necessarily identity, but full rank over GF(2)).
-        pairing = (self.logical_x @ self.logical_z.T) % 2
-        if self._gf2_rank(pairing) != self.k:
-            raise ValueError(
-                "logical_x and logical_z do not form a valid dual pairing"
-            )
+        pairing = (self.logical_x.float() @ self.logical_z.T.float()) % 2
+        assert gf2_rank(pairing) == self.k, "logical_x and logical_z do not form a valid dual pairing"
 
-        print("Code validation passed: all checks successful.")
         return True
 
-
-    def render(self, mode="human"):
-
-        if mode == "edge_info":
-            self._get_edge_information()
-            return
-
-        # pos = nx.multipartite_layout(self.graph, subset_key="layer")
-        pos = nx.spring_layout(self.graph, seed=42)  # Use a fixed seed for consistent layouts across runs
-
-        # Separate node lists
-        qubits = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "qubit" and self.x_errors[int(n[1:])] == 1]
-        x_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "x_check" and self.data.x[self.node_to_index[n], 3] == 1]
-        z_checks = [n for n in self.graph.nodes if self.graph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 1]
-        qubit_colors = ["orange" if self.x_errors[int(n[1:])] == 1 else "black" for n in qubits]
-        x_check_colors = ["red" if self.data.x[self.node_to_index[n], 3] == 1 else "lightcoral" for n in
-                          x_checks]
-        z_check_colors = ["blue" if self.data.x[self.node_to_index[n], 4] == 1 else "lightblue" for n in
-                          z_checks]
-
-        # Color edges based on whether they are connected to an error qubit or not
-        error_edges = []
-        normal_edges = []
-
-        for u, v in self.graph.edges:
-            # Check if either endpoint is a qubit with error
-            def is_error_qubit(node):
-                return (
-                        self.graph.nodes[node]["node_type"] == "qubit" and
-                        self.x_errors[int(node[1:])] == 1
-                )
-
-            if is_error_qubit(u) or is_error_qubit(v):
-                error_edges.append((u, v))
-            else:
-                normal_edges.append((u, v))
-
-        plt.figure(figsize=(10, 8))
-
-        # Draw edges
-        # Draw normal edges
-        nx.draw_networkx_edges(self.graph, pos,
-                               edgelist=normal_edges,
-                               alpha=0.3)
-
-        # Draw error edges (highlighted)
-        nx.draw_networkx_edges(self.graph, pos,
-                               edgelist=error_edges,
-                               edge_color="red",
-                               width=2.0)
-
-        # Draw nodes by type (different shapes & colors)
-        nx.draw_networkx_nodes(self.graph, pos,
-                               nodelist=qubits,
-                               node_color=qubit_colors,
-                               node_shape="o",
-                               node_size=200,
-                               label="Data qubits")
-
-        nx.draw_networkx_nodes(self.graph, pos,
-                               nodelist=x_checks,
-                               node_color=x_check_colors,
-                               node_shape="s",
-                               node_size=300,
-                               label="X checks")
-
-        nx.draw_networkx_nodes(self.graph, pos,
-                               nodelist=z_checks,
-                               node_color=z_check_colors,
-                               node_shape="^",
-                               node_size=300,
-                               label="Z checks")
-
-        plt.legend(scatterpoints=1)
-        plt.axis("off")
-        plt.title("CSS Tanner Graph (Bicycle Code)")
-
-        plt.show()
-
-
-    def number_of_overlapping_stabilizers(self, indices=None):
-
-        if indices is None:
-            indices = torch.where(self.x_errors == 1)[0].tolist()
-
-        x_overlap = self.H_z[:, indices].sum(axis=1)
-
-        # Count the number of times 2 occurs in the array
-        num_x_overlaps_one = (x_overlap == 1).sum().item()
-        num_x_overlaps_two = (x_overlap == 2).sum().item()
-        return (num_x_overlaps_one, num_x_overlaps_two)
-
-
-    def get_subgraph_of_indices(self, indices):
-        # Return the subgraph of the Tanner graph containing only the specified qubit indices and their neighboring checks.
-        nodes_to_include = set()
-        for idx in indices:
-            qubit_node = f"q{idx}"
-            nodes_to_include.add(qubit_node)
-            neighbors = self.graph.neighbors(qubit_node)
-            nodes_to_include.update(neighbors)
-
-        # Filter on only q and z check nodes to simplify visualization
-        nodes_to_include = {n for n in nodes_to_include if self.graph.nodes[n]["node_type"] in ("qubit", "z_check")}
-
-        return self.graph.subgraph(nodes_to_include)
-
-
-    def render_subgraph(self, indices=None, overlap=None, mistakes=None, total=None, with_labels=False, with_title=False):
-
-        if indices is not None:
-            subgraph = self.get_subgraph_of_indices(indices)
-        else:
-            error_indices = torch.where(self.x_errors == 1)[0].tolist()
-            subgraph = self.get_subgraph_of_indices(error_indices)
-
-        qubit_labels = {
-            n: str(int(n[1:]))  # "q17" -> "17"
-            for n in subgraph.nodes
-            if subgraph.nodes[n]["node_type"] == "qubit"
-        }
-
-        pos = nx.spring_layout(subgraph, seed=42)  # Use a fixed seed for consistent layouts across runs
-
-        fig = plt.figure(figsize=(8, 6))
-        # nx.draw(subgraph, pos, with_labels=True, node_color="lightblue", edge_color="gray")
-
-        if with_labels:
-            nx.draw_networkx_labels(
-                subgraph,
-                pos,
-                labels=qubit_labels,
-                font_size=8
-            )
-
-        nx.draw_networkx_nodes(subgraph, pos,
-                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"],
-                               node_color="orange",
-                               node_shape="o",
-                               node_size=200,
-                               label="Data qubits")
-
-        nx.draw_networkx_nodes(subgraph, pos,
-                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 1],
-                               node_color="red",
-                               node_shape="s",
-                               node_size=300,
-                               label="X checks")
-
-        nx.draw_networkx_nodes(subgraph, pos,
-                               nodelist=[n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and self.data.x[self.node_to_index[n], 4] == 0],
-                               node_color="lightcoral",
-                               node_shape="s",
-                               node_size=300,
-                               label="X checks (no syndrome)")
-
-        nx.draw_networkx_edges(subgraph, pos, edge_color="gray")
-
-        if with_title and overlap is not None and mistakes is not None and total is not None:
-            plt.title(f"Pattern {overlap} (Mistake frequency: {mistakes} / {total}, {100 * mistakes / total:.2f}%)")
-
-        plt.axis("off")
-
-        # plt.show()
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
-        plt.close(fig)
-        buf.seek(0)
-
-        img = Image.open(buf).convert("RGB")
-        return img
 

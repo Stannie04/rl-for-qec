@@ -3,15 +3,15 @@ import numpy as np
 import galois
 
 from src.read_config import ConfigParser
-from src.environment.code import QLDPCCode
+from src.environment.code import QECCode
 
-class QLDPCEnv(gym.Env):
+class QECEnv(gym.Env):
 
     def __init__(self, config: ConfigParser, shots=None):
         super().__init__()
         self.device = config.device
 
-        self.code = QLDPCCode(config)
+        self.code = QECCode(config)
         self.action_space = gym.spaces.Discrete(self.code.n_data)
         # self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.code.n_data,), dtype=np.int8)
 
@@ -50,7 +50,7 @@ class QLDPCEnv(gym.Env):
         reward += -0.3 if self.info["repeated_action"] else 0.0
 
         syndrome_delta = self.previous_num_syndromes - self.info["num_syndromes"]
-        reward += 0.5 * syndrome_delta / self.initial_syndromes
+        reward += 0.5 * syndrome_delta / self.initial_syndromes if self.initial_syndromes > 0 else 0.0
 
         if self.info["error_free"]:
             efficiency = self.initial_errors / (self.initial_errors + self.episode_steps)
@@ -131,7 +131,7 @@ class QLDPCEnv(gym.Env):
 
 
     def render(self, mode='human'):
-        self.code.render(mode=mode)
+        self.code.render(mode)
 
 
     def _init_metrics_on_reset(self):
