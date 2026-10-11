@@ -188,7 +188,7 @@ def get_nonzero_overlap_distribution(config, shots):
 
     env = QECEnv(config, shots)
 
-    H_z = env.code.H_z.cpu().numpy()
+    H_z = env.code.H.z.cpu().numpy()
     error_matrix = shots[:, 0, :]
 
     overlaps = error_matrix @ H_z.T
@@ -215,7 +215,7 @@ def get_mistake_distribution(config, agents):
 
 
     env_tmp = QECEnv(config)
-    H_z = env_tmp.code.H_z.detach().cpu().numpy()
+    H_z = env_tmp.code.H.z.detach().cpu().numpy()
     H_z_T = H_z.T
 
     all_accuracies = {}
@@ -322,7 +322,7 @@ def get_pattern_frequency(config):
     shots = create_dataset_from_random_shots(config, num_samples=num_samples, error_rate=0.001)
     env = QECEnv(config, shots)
 
-    H_z = env.code.H_z.cpu().numpy()
+    H_z = env.code.H.z.cpu().numpy()
     error_matrix = shots[:, 0, :]
 
     overlaps = error_matrix @ H_z.T

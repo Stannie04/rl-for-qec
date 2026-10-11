@@ -41,16 +41,16 @@ def test_dimensions_and_syndrome_buffer_sizes(code):
     assert code.n_data == N_DATA
     assert code.n_stabilizers == N_X
 
-    assert code.H_x.shape == (N_X, N_DATA)
-    assert code.H_z.shape == (N_Z, N_DATA)
-    assert code.H_x_T.shape == (N_DATA, N_X)
-    assert code.H_z_T.shape == (N_DATA, N_Z)
+    assert code.H.x.shape == (N_X, N_DATA)
+    assert code.H.z.shape == (N_Z, N_DATA)
+    assert code.H.x_T.shape == (N_DATA, N_X)
+    assert code.H.z_T.shape == (N_DATA, N_Z)
 
     # X and Z syndromes are sized by their own check matrices.
     assert code.x_syndrome.shape == (N_X,)
     assert code.z_syndrome.shape == (N_Z,)
-    assert code.x_syndrome.numel() == code.H_x.shape[0]
-    assert code.z_syndrome.numel() == code.H_z.shape[0]
+    assert code.x_syndrome.numel() == code.H.x.shape[0]
+    assert code.z_syndrome.numel() == code.H.z.shape[0]
 
 
 def test_logical_operators_have_k_rows(code):
@@ -63,7 +63,7 @@ def test_single_qubit_flip_matches_check_matrix_column(code, qubit):
     # X error on a single qubit excites exactly the Z checks touching it.
     code.clear_errors()
     code.flip(qubit, error_type=1)
-    expected_z = code.H_z[:, qubit]
+    expected_z = code.H.z[:, qubit]
     assert torch.equal(code.z_syndrome, expected_z)
     assert int(code.z_syndrome.sum()) == int(expected_z.sum()) > 0
     assert int(code.x_syndrome.sum()) == 0
@@ -71,7 +71,7 @@ def test_single_qubit_flip_matches_check_matrix_column(code, qubit):
     # Z error on a single qubit excites exactly the X checks touching it.
     code.clear_errors()
     code.flip(qubit, error_type=2)
-    assert torch.equal(code.x_syndrome, code.H_x[:, qubit])
+    assert torch.equal(code.x_syndrome, code.H.x[:, qubit])
     assert int(code.x_syndrome.sum()) > 0
     assert int(code.z_syndrome.sum()) == 0
 
