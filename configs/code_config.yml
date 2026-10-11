@@ -137,16 +137,24 @@
 
 #
 # Surface codes.
+# NOTE: Only the distance is required as the other parameters are automatically determined,
+# but `n`(=d^2) and `k`(=1) are still specified 1) as a sanity check and 2) to remain compatible with the rest of the code.
 #
 
 d3_surface:
   code_type: surface
+  n: 9
+  k: 1
   d: 3
 
 d5_surface:
   code_type: surface
+  n: 25
+  k: 1
   d: 5
 
 d7_surface:
   code_type: surface
+  n: 49
+  k: 1
   d: 7
