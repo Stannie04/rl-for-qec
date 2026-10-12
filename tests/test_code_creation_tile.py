@@ -6,7 +6,9 @@ import pytest
 
 # Load the module straight from its file: the `src.environment` package __init__ pulls in
 # torch/galois-backed code that this numpy-only builder does not need.
-_spec = importlib.util.spec_from_file_location("tile_code", Path(__file__).with_name("parity_check_matrices.py"))
+ROOT = Path(__file__).resolve().parents[1]
+MODULE_PATH = ROOT / "src" / "environment" / "parity_check_matrices.py"
+_spec = importlib.util.spec_from_file_location("tile_code", MODULE_PATH)
 tile_code = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(tile_code)
 build_tile_code = tile_code.build_tile_code

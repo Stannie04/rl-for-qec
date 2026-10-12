@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import io
 from dataclasses import dataclass
 
-import math
-
 
 @dataclass(frozen=True)
 class RenderInfo:

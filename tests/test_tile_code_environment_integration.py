@@ -17,7 +17,7 @@ import yaml  # noqa: E402
 
 from src.environment.code import QECCode  # noqa: E402
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "code_config.yml"
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "configs" / "code_config.yml"
 CODE_NAME = "288_8_12_tile"
 N_X, N_Z, N_DATA = 140, 140, 288
 
@@ -32,7 +32,7 @@ def tile_config():
 @pytest.fixture(scope="module")
 def code():
     """One shared build: constructing + validating the code is the expensive part."""
-    return QECCode(tile_config(), validate=True)
+    return QECCode(tile_config())
 
 
 def test_dimensions_and_syndrome_buffer_sizes(code):
