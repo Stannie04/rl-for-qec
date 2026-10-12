@@ -1,6 +1,6 @@
 import torch
 from src.agents import SACAgent, BPAgent, BPOSDAgent, MWPMAgent, SLAgent
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 from tqdm import tqdm
@@ -58,7 +58,7 @@ def collect_mistakes(agent, env, inference_fn, worker_id):
 
 
 def run_worker(agent_name, config, shots, worker_fn, worker_id, repetition=None):
-    env = QLDPCEnv(config, shots)
+    env = QECEnv(config, shots)
     agent, inference_fn = get_agent_and_inference(config, env, agent_name, repetition)
     return worker_fn(agent, env, inference_fn, worker_id)
 

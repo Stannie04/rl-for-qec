@@ -1,5 +1,7 @@
 # Generalizable Quantum Error Correction using an Ensemble of Neural Decoders
 
+![Overview of the Decoder ensemble pipeline.](notes/pipeline_overview.png)
+
 **NOTE: For the code version used in the thesis, check out the `thesis` branch.**
 
 This repository contains the code and resources for the formulation, construction and training of

@@ -6,8 +6,8 @@ class MWPMAgent:
     def __init__(self, env, config):
         self.env = env
 
-        self.matching_x = pymatching.Matching(env.code.H_x.cpu().numpy())
-        self.matching_z = pymatching.Matching(env.code.H_z.cpu().numpy())
+        self.matching_x = pymatching.Matching(env.code.H.x.cpu().numpy())
+        self.matching_z = pymatching.Matching(env.code.H.z.cpu().numpy())
 
     def select_action(self, observation, evaluate=False):
 

@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 
 from src.agents import SACAgent, CGNNEncoder, RouterAgent
-from src.environment import QLDPCEnv
+from src.environment import QECEnv
 from src.read_config import ConfigParser
 from src.train_utils.datasets import create_dataset_from_random_shots,  create_dataset_from_uniform_shots, create_dataset_from_random_shots_labelled
 from src.train_utils.inference import get_agent_and_inference, parallel_inference
@@ -24,7 +24,7 @@ def evaluate_agent(config: ConfigParser, step, best_model_ler, agent_name=None, 
         noise_model="bit_flip",
     )
 
-    eval_env = QLDPCEnv(config, shots)
+    eval_env = QECEnv(config, shots)
     agent, _ = get_agent_and_inference(config, eval_env, agent_name)
 
     logical_failures = 0
@@ -81,9 +81,9 @@ def per_to_ler_router(config):
     for error_rate in [0.01, 0.0075, 0.005, 0.0025, 0.001]:
         shots = create_dataset_from_random_shots(config, config.post_training_evaluation_episodes, error_rate, noise_model="bit_flip")
 
-        moe_env = QLDPCEnv(config, shots)
-        bp_env = QLDPCEnv(config, shots)
-        neural_env = QLDPCEnv(config, shots)
+        moe_env = QECEnv(config, shots)
+        bp_env = QECEnv(config, shots)
+        neural_env = QECEnv(config, shots)
 
         router = RouterAgent(config, moe_env, router_checkpoint="checkpoints/evaluate_cps/router.pt")
         bp_agent, bp_inference = get_agent_and_inference(config, bp_env, "bp")

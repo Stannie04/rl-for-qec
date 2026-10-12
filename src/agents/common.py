@@ -6,8 +6,8 @@ def get_action_mask(state, env):
     # mask = H_x_T @ x_syndrome + H_z_T @ z_syndrome
     # Gets only qubits that are connected to active syndromes
 
-    x_mask = env.code.H_x_T @ state.x[env.code.x_idx, 3]
-    z_mask = env.code.H_z_T @ state.x[env.code.z_idx, 4]
+    x_mask = env.code.H.x_T @ state.x[env.code.x_idx, 3]
+    z_mask = env.code.H.z_T @ state.x[env.code.z_idx, 4]
 
     return (x_mask + z_mask) > 0
 
