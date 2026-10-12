@@ -1,5 +1,5 @@
 from .sac import SACAgent
-from .belief_propagation import BPAgent, BPOSDAgent
+from .belief_propagation import BPAgent, BPOSDAgent, BPLSDAgent
 from .mwpm import MWPMAgent
 from .router import RouterAgent
 from .common import get_qubit_mask

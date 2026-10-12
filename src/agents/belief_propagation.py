@@ -9,8 +9,8 @@ class BPAgent:
         H_z = np.array(env.code.H.z.cpu(), dtype=np.int8)
         H_x = np.array(env.code.H.x.cpu(), dtype=np.int8)
 
-        self.bp_x = ldpc.BpDecoder(H_x, error_rate=env.curriculum_error_rate, max_iter=100)
-        self.bp_z = ldpc.BpDecoder(H_z, error_rate=env.curriculum_error_rate, max_iter=100)
+        self.bp_x = ldpc.BpDecoder(H_x, error_rate=env.curriculum_error_rate, max_iter=1_000)
+        self.bp_z = ldpc.BpDecoder(H_z, error_rate=env.curriculum_error_rate, max_iter=1_000)
 
     def select_action(self, observation, evaluate=False):
         # Use belief propagation to decode the syndrome and determine the error
@@ -34,8 +34,19 @@ class BPOSDAgent(BPAgent):
     def __init__(self, env, config):
         super().__init__(env, config)
 
-        H_z = np.array(env.code.H.x.cpu(), dtype=np.int8)
-        H_x = np.array(env.code.H.z.cpu(), dtype=np.int8)
+        H_x = np.array(env.code.H.x.cpu(), dtype=np.int8)
+        H_z = np.array(env.code.H.z.cpu(), dtype=np.int8)
 
-        self.bp_x = ldpc.BpOsdDecoder(H_z, error_rate=env.curriculum_error_rate, max_iter=100)
-        self.bp_z = ldpc.BpOsdDecoder(H_x, error_rate=env.curriculum_error_rate, max_iter=100)
+        self.bp_x = ldpc.BpOsdDecoder(H_x, error_rate=env.curriculum_error_rate, max_iter=10_000)
+        self.bp_z = ldpc.BpOsdDecoder(H_z, error_rate=env.curriculum_error_rate, max_iter=10_000)
+
+
+class BPLSDAgent(BPAgent):
+    def __init__(self, env, config):
+        super().__init__(env, config)
+
+        H_x = np.array(env.code.H.x.cpu(), dtype=np.int8)
+        H_z = np.array(env.code.H.z.cpu(), dtype=np.int8)
+
+        self.bp_x = ldpc.BpLsdDecoder(H_x, error_rate=env.curriculum_error_rate, max_iter=30)
+        self.bp_z = ldpc.BpLsdDecoder(H_z, error_rate=env.curriculum_error_rate, max_iter=30)
