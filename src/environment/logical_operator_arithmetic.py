@@ -55,7 +55,7 @@ def _pair_logical_bases(logical_x, logical_z, n_data, k, device):
         torch.eye(k, dtype=torch.float32,device=device)
     ),"Logical X/Z pairing is not the identity matrix"
 
-    return logical_x, logical_x.T, logical_z, logical_z.T
+    return logical_x, logical_x.T.float(), logical_z, logical_z.T.float()
 
 
 def logical_support_dimension(error_support: torch.Tensor, commuting_checks: torch.Tensor,

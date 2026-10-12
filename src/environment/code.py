@@ -5,7 +5,7 @@ import torch
 from src.read_config import ConfigParser
 from src.environment.parity_check_matrices import ParityCheckMatrices
 from src.environment.render_methods import render_spring, render_subgraph, render_surface
-from src.environment.logical_operator_arithmetic import get_logical_operators, logical_support_dimension, gf2_rank
+from src.environment.logical_operator_arithmetic import get_logical_operators
 
 
 class QECCode(gym.Env):
@@ -60,15 +60,19 @@ class QECCode(gym.Env):
 
 
     def has_logical_error(self) -> torch.Tensor:
-        x_logical_dim = logical_support_dimension(
-            self.x_errors != 0,
-            commuting_checks=self.H.z, stabilizers=self.H.x, stabilizer_rank=self.H.x_rank)
 
-        z_logical_dim = logical_support_dimension(
-            self.z_errors != 0,
-            commuting_checks=self.H.x, stabilizers=self.H.z, stabilizer_rank=self.H.z_rank)
-
-        return torch.tensor((x_logical_dim > 0) or (z_logical_dim > 0),dtype=torch.bool,device=self.device)
+        syndrome_x = (self.H.z.float() @ self.x_errors.float()) % 2
+        syndrome_z = (self.H.x.float() @ self.z_errors.float()) % 2
+        logical_x_state, logical_z_state = self.get_logical_state()
+        x_is_logical = (
+            not bool(torch.any(syndrome_x != 0).item())
+            and bool(torch.any(logical_x_state != 0).item())
+        )
+        z_is_logical = (
+            not bool(torch.any(syndrome_z != 0).item())
+            and bool(torch.any(logical_z_state != 0).item())
+        )
+        return torch.tensor(x_is_logical or z_is_logical, dtype=torch.bool, device=self.device)
 
 
     def is_error_free(self) -> bool:
