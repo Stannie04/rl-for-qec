@@ -154,7 +154,7 @@ def generalizability_evaluation(config, agents):
 
 def post_train_evaluation(config):
     # Evaluate the agent at the end of training and print results to console.
-    agents = ["rl_cgnn", "sl_cgnn", "sl_nbp", "rl_nbp", "bp", "bp_osd"]
+    agents = ["rl_cgnn", "sl_cgnn", "sl_nbp", "rl_nbp", "bp", "bp_osd", "bp_lsd"]
 
 
     results = per_to_ler_agents(config, agents)

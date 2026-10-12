@@ -5,11 +5,11 @@ import torch
 from src.read_config import ConfigParser
 from src.environment.parity_check_matrices import ParityCheckMatrices
 from src.environment.render_methods import render_spring, render_subgraph, render_surface
-from src.environment.logical_operator_arithmetic import get_logical_operators, logical_support_dimension, gf2_rank
+from src.environment.logical_operator_arithmetic import get_logical_operators
 
 
 class QECCode(gym.Env):
-    def __init__(self, config: ConfigParser, validate=False):
+    def __init__(self, config: ConfigParser):
         super(QECCode, self).__init__()
         self.device = config.device
         self.code_type = config.code_type
@@ -51,9 +51,6 @@ class QECCode(gym.Env):
         self.logical_x, self.logical_x_T, self.logical_z, self.logical_z_T = get_logical_operators(self.H.x, self.H.z, self.n_data, self.k, self.device)
         self.qubit_to_x, self.qubit_to_z = self._get_connected_checks()
 
-        if validate:
-            self._assert_valid_code()
-
 
     def get_logical_state(self):
         logical_x_state = (self.x_errors.float().unsqueeze(0) @ self.logical_z_T) % 2
@@ -63,15 +60,19 @@ class QECCode(gym.Env):
 
 
     def has_logical_error(self) -> torch.Tensor:
-        x_logical_dim = logical_support_dimension(
-            self.x_errors != 0,
-            commuting_checks=self.H.z, stabilizers=self.H.x, stabilizer_rank=self.H.x_rank)
 
-        z_logical_dim = logical_support_dimension(
-            self.z_errors != 0,
-            commuting_checks=self.H.x, stabilizers=self.H.z, stabilizer_rank=self.H.z_rank)
-
-        return torch.tensor((x_logical_dim > 0) or (z_logical_dim > 0),dtype=torch.bool,device=self.device)
+        syndrome_x = (self.H.z.float() @ self.x_errors.float()) % 2
+        syndrome_z = (self.H.x.float() @ self.z_errors.float()) % 2
+        logical_x_state, logical_z_state = self.get_logical_state()
+        x_is_logical = (
+            not bool(torch.any(syndrome_x != 0).item())
+            and bool(torch.any(logical_x_state != 0).item())
+        )
+        z_is_logical = (
+            not bool(torch.any(syndrome_z != 0).item())
+            and bool(torch.any(logical_z_state != 0).item())
+        )
+        return torch.tensor(x_is_logical or z_is_logical, dtype=torch.bool, device=self.device)
 
 
     def is_error_free(self) -> bool:
@@ -236,55 +237,3 @@ class QECCode(gym.Env):
         data = Data(x=x, edge_index=edge_index)
 
         return G, data, node_to_index
-
-
-    def _assert_valid_code(self):
-        # Basic presence checks
-        for name in ("n", "k", "d", "H", "logical_x", "logical_z"):
-            assert hasattr(self, name), f"Missing required attribute: {name}"
-
-        # Shape checks
-        assert (self.H.x.ndim == 2 and self.H.z.ndim == 2), "H_x and H_z must both be 2D tensors"
-        assert self.logical_x.ndim == 2 and self.logical_z.ndim == 2, "logical_x and logical_z must both be 2D tensors"
-        assert self.H.x.shape[1] == self.H.z.shape[1], f"H_x and H_z must have the same number of columns, got {self.H.x.shape[1]} and {self.H.z.shape[1]}"
-        assert self.logical_x.shape[1] == self.H.x.shape[1] and self.logical_z.shape[1] == self.H.x.shape[1], f"logical_x/logical_z must each have {self.H.x.shape[1]} columns, got {self.logical_x.shape[1]} and {self.logical_z.shape[1]}"
-
-        # Binary checks
-        for name, mat in (("H_x", self.H.x), ("H_z", self.H.z), ("logical_x", self.logical_x), ("logical_z", self.logical_z)):
-            assert torch.all((mat == 0) | (mat == 1)), f"{name} must be binary (contain only 0/1 entries)"
-
-        # Commutation: H_x H_z^T = 0 mod 2
-        commutation = (self.H.x @ self.H.z.T) % 2
-        assert not torch.any(commutation != 0), "Invalid code: H_x and H_z do not commute over GF(2)"
-
-        # Expected number of logical qubits for a CSS code:
-        # k = n - rank(H_x) - rank(H_z)
-        rank_hx = gf2_rank(self.H.x)
-        rank_hz = gf2_rank(self.H.z)
-        expected_k = self.H.x.shape[1] - rank_hx - rank_hz
-
-        assert expected_k >= 0, f"Invalid code: computed negative logical qubit count k={expected_k}"
-        assert self.k == expected_k, f"Invalid code: expected k={expected_k} from ranks, but config k={self.k}"
-        assert self.logical_x.shape[0] == self.k, f"Number of logical X operators does not match k: {self.logical_x.shape[0]} vs {self.k}"
-        assert self.logical_z.shape[0] == self.k, f"Number of logical Z operators does not match k: {self.logical_z.shape[0]} vs {self.k}"
-
-        # Logical X must commute with Z stabilizers; logical Z must commute with X stabilizers
-        x_vs_zstab = (self.logical_x.float() @ self.H.z.T.float()) % 2
-        z_vs_xstab = (self.logical_z.float() @ self.H.x.T.float()) % 2
-        assert torch.any(x_vs_zstab == 0), "logical_x does not commute with all Z stabilizers"
-        assert torch.any(z_vs_xstab == 0), "logical_z does not commute with all X stabilizers"
-
-        # Logical operators must be independent modulo stabilizers
-        rank_hx_with_logicals = gf2_rank(torch.cat([self.H.x, self.logical_x], dim=0))
-        rank_hz_with_logicals = gf2_rank(torch.cat([self.H.z, self.logical_z], dim=0))
-
-        assert rank_hx_with_logicals == rank_hx + self.k, "logical_x vectors are not linearly independent modulo row(H_x)"
-        assert rank_hz_with_logicals == rank_hz + self.k, "logical_z vectors are not linearly independent modulo row(H_z)"
-        # Pairing between chosen logical bases should be nondegenerate
-        # (not necessarily identity, but full rank over GF(2)).
-        pairing = (self.logical_x.float() @ self.logical_z.T.float()) % 2
-        assert gf2_rank(pairing) == self.k, "logical_x and logical_z do not form a valid dual pairing"
-
-        return True
-
-

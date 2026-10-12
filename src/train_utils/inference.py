@@ -1,5 +1,5 @@
 import torch
-from src.agents import SACAgent, BPAgent, BPOSDAgent, MWPMAgent, SLAgent
+from src.agents import SACAgent, BPAgent, BPOSDAgent, BPLSDAgent, MWPMAgent, SLAgent
 from src.environment import QECEnv
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
@@ -126,6 +126,7 @@ def get_agent(config, env, agent_name, repetition=None):
             case "mwpm": return MWPMAgent(env, config)
             case "bp": return BPAgent(env, config)
             case "bp_osd": return BPOSDAgent(env, config)
+            case "bp_lsd": return BPLSDAgent(env, config)
             case _: raise NotImplementedError(f"Agent {agent_name} does not exist.")
 
         config.use_neural_bp, config.hidden_layers_gnn, config.hidden_layers_mlp, config.neural_bp_iterations = old
