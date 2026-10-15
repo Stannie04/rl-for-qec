@@ -4,6 +4,13 @@ import numpy as np
 
 GF2 = galois.GF(2)
 
+class LogicalOperators:
+    def __init__(self, H_x, H_z, n_data, k, device):
+        self.x, self.z = get_logical_operators(H_x, H_z, n_data, k, device)
+        self.x_T, self.z_T = self.x.T, self.z.T
+        self.x_T_float, self.z_T_float = self.x_T.float(), self.z_T.float()
+
+
 def gf2_rank(mat: torch.Tensor) -> int:
     """Rank over GF(2)."""
     arr = mat.detach().cpu().numpy().astype(np.int8, copy=False)
@@ -55,7 +62,7 @@ def _pair_logical_bases(logical_x, logical_z, n_data, k, device):
         torch.eye(k, dtype=torch.float32,device=device)
     ),"Logical X/Z pairing is not the identity matrix"
 
-    return logical_x, logical_x.T.float(), logical_z, logical_z.T.float()
+    return logical_x, logical_z
 
 
 def logical_support_dimension(error_support: torch.Tensor, commuting_checks: torch.Tensor,

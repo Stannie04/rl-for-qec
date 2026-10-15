@@ -5,7 +5,7 @@ import torch
 from src.read_config import ConfigParser
 from src.environment.parity_check_matrices import ParityCheckMatrices
 from src.environment.render_methods import render_spring, render_subgraph, render_surface
-from src.environment.logical_operator_arithmetic import get_logical_operators
+from src.environment.logical_operator_arithmetic import LogicalOperators
 
 
 class QECCode(gym.Env):
@@ -48,31 +48,39 @@ class QECCode(gym.Env):
         self.z_syndrome = torch.zeros(self.H.z.shape[0], dtype=torch.long, device=self.device)
         self.num_x_errors, self.num_z_errors = 0, 0
 
-        self.logical_x, self.logical_x_T, self.logical_z, self.logical_z_T = get_logical_operators(self.H.x, self.H.z, self.n_data, self.k, self.device)
+        self.logical = LogicalOperators(self.H.x, self.H.z, self.n_data, self.k, self.device)
         self.qubit_to_x, self.qubit_to_z = self._get_connected_checks()
 
 
     def get_logical_state(self):
-        logical_x_state = (self.x_errors.float().unsqueeze(0) @ self.logical_z_T) % 2
-        logical_z_state = (self.z_errors.float().unsqueeze(0) @ self.logical_x_T) % 2
+        logical_x_state = (self.x_errors.float().unsqueeze(0) @ self.logical.z_T_float) % 2
+        logical_z_state = (self.z_errors.float().unsqueeze(0) @ self.logical.x_T_float) % 2
 
         return logical_x_state, logical_z_state
 
 
-    def has_logical_error(self) -> torch.Tensor:
+    def has_logical_error(self) -> bool:
 
-        syndrome_x = (self.H.z.float() @ self.x_errors.float()) % 2
-        syndrome_z = (self.H.x.float() @ self.z_errors.float()) % 2
         logical_x_state, logical_z_state = self.get_logical_state()
-        x_is_logical = (
-            not bool(torch.any(syndrome_x != 0).item())
-            and bool(torch.any(logical_x_state != 0).item())
-        )
-        z_is_logical = (
-            not bool(torch.any(syndrome_z != 0).item())
-            and bool(torch.any(logical_z_state != 0).item())
-        )
-        return torch.tensor(x_is_logical or z_is_logical, dtype=torch.bool, device=self.device)
+
+        x_syndrome_clear = torch.all(self.x_syndrome == 0)
+        z_syndrome_clear = torch.all(self.z_syndrome == 0)
+        x_is_logical = torch.any(logical_x_state != 0)
+        z_is_logical = torch.any(logical_z_state != 0)
+
+        # Combine the checks before converting to a Python bool.
+        return bool((x_syndrome_clear & x_is_logical)| (z_syndrome_clear & z_is_logical))
+
+
+        # x_is_logical = (
+        #     not bool(torch.any(self.x_syndrome != 0).item())
+        #     and bool(torch.any(logical_x_state != 0).item())
+        # )
+        # z_is_logical = (
+        #     not bool(torch.any(self.z_syndrome != 0).item())
+        #     and bool(torch.any(logical_z_state != 0).item())
+        # )
+        # return torch.tensor(x_is_logical or z_is_logical, dtype=torch.bool, device=self.device)
 
 
     def is_error_free(self) -> bool:
@@ -81,8 +89,8 @@ class QECCode(gym.Env):
 
     def reset_syndrome(self) -> None:
 
-        self.x_syndrome = ((self.H.x.float() @ self.z_errors.float()) % 2).long()
-        self.z_syndrome = ((self.H.z.float() @ self.x_errors.float()) % 2).long()
+        self.x_syndrome = ((self.H.x_float @ self.z_errors.float()) % 2).long()
+        self.z_syndrome = ((self.H.z_float @ self.x_errors.float()) % 2).long()
 
 
     def update_graph(self, llr) -> None:

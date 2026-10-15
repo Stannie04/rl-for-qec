@@ -8,18 +8,15 @@ class ParityCheckMatrices:
         self.device = device
 
         match code_type:
-            case "ldpc": H_x, H_z = self._init_parity_check_matrices_ldpc(**kwargs)
-            case "tile": H_x, H_z = self._init_parity_check_matrices_tile(**kwargs)
-            case "surface": H_x, H_z = self._init_parity_check_matrices_surface(**kwargs)
+            case "ldpc": self.x, self.z = self._init_parity_check_matrices_ldpc(**kwargs)
+            case "tile": self.x, self.z = self._init_parity_check_matrices_tile(**kwargs)
+            case "surface": self.x, self.z = self._init_parity_check_matrices_surface(**kwargs)
             case _: raise ValueError(f"Unknown code type: {code_type}")
 
-        self.x = H_x
-        self.z = H_z
-        self.x_T = H_x.t().contiguous()
-        self.z_T = H_z.t().contiguous()
-
-        self.x_rank = gf2_rank(H_x)
-        self.z_rank = gf2_rank(H_z)
+        self.x_float, self.z_float = self.x.float(), self.z.float()
+        self.x_T, self.z_T = self.x.t().contiguous(), self.z.t().contiguous()
+        self.x_T_float, self.z_T_float = self.x_T.float(), self.z_T.float()
+        self.x_rank, self.z_rank = gf2_rank(self.x), gf2_rank(self.z)
 
 
     def _init_parity_check_matrices_ldpc(self, l, m, code_params):

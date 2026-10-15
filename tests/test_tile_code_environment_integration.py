@@ -54,8 +54,8 @@ def test_dimensions_and_syndrome_buffer_sizes(code):
 
 
 def test_logical_operators_have_k_rows(code):
-    assert code.logical_x.shape == (8, N_DATA)
-    assert code.logical_z.shape == (8, N_DATA)
+    assert code.logical.x.shape == (8, N_DATA)
+    assert code.logical.z.shape == (8, N_DATA)
 
 
 @pytest.mark.parametrize("qubit", [0, 137, 287])

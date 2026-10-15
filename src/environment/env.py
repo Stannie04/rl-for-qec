@@ -64,7 +64,7 @@ class QECEnv(gym.Env):
 
     @property
     def terminated(self):
-        return self.info["error_free"]
+        return self.info["logical_error"] or self.info["error_free"]
 
 
     @property

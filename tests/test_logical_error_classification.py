@@ -121,10 +121,14 @@ def _set_residual(
         code.x_errors.zero_()
     else:
         code.x_errors.copy_(torch.as_tensor(x, dtype=torch.long, device=code.device))
+        code.x_syndrome = (code.H.z @ code.x_errors) % 2
+
     if z is None:
         code.z_errors.zero_()
     else:
         code.z_errors.copy_(torch.as_tensor(z, dtype=torch.long, device=code.device))
+        code.z_syndrome = (code.H.x @ code.z_errors) % 2
+
     assert code.x_errors.numel() == n and code.z_errors.numel() == n
 
 
@@ -251,7 +255,7 @@ def _assert_z_residual_matches_coset(code, setup, error: np.ndarray) -> None:
 def test_small_code_exhaustively_classifies_every_syndrome_free_residual(small_code):
     """Enumerate the full X and Z kernels of the [[18, 4, 4]] code."""
     hx, hz = _to_numpy(small_code.H.x), _to_numpy(small_code.H.z)
-    lx, lz = _to_numpy(small_code.logical_x), _to_numpy(small_code.logical_z)
+    lx, lz = _to_numpy(small_code.logical.x), _to_numpy(small_code.logical.z)
 
     cases = (
         ("X", hx, hz, lx, lz),
@@ -284,7 +288,7 @@ def test_small_code_exhaustively_classifies_every_syndrome_free_residual(small_c
 def test_nonzero_syndrome_is_detected_not_counted_as_logical_failure(small_code):
     """A nonzero syndrome is detectable even if logical overlaps are nonzero."""
     hx, hz = _to_numpy(small_code.H.x), _to_numpy(small_code.H.z)
-    lx, lz = _to_numpy(small_code.logical_x), _to_numpy(small_code.logical_z)
+    lx, lz = _to_numpy(small_code.logical.x), _to_numpy(small_code.logical.z)
     n = small_code.n_data
     rng = np.random.default_rng(20261008)
 
