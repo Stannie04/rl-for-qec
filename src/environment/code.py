@@ -31,7 +31,6 @@ class QECCode(gym.Env):
             self.H = ParityCheckMatrices("tile", L=self.L, code_params=config.code_params, device=self.device)
             self.n_data, self.n_stabilizers = self.H.x.shape[1], self.H.x.shape[0]
 
-        self.no_op_index = self.n_data  # Action index for "no operation"
         self.graph, self.data, self.node_to_index = self._init_graph()
 
         self.feature_dim = self.data.x.shape[1]

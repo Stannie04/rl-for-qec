@@ -1,26 +1,3 @@
-dqn:
-  batch_size: 256
-  gamma: 0.99
-  epsilon_start: 0.1
-  epsilon_end: 0.1
-  epsilon_decay: 10000
-  tau: 0.005
-  train_frequency: 4
-  learning_rate: 0.0001
-  replay_buffer_capacity: 10000
-  hidden_channels_GCN:
-    - 32
-    - 128
-    - 256
-    - 512
-    - 512
-    - 256
-    - 256
-  hidden_channels_MLP:
-    - 256
-    - 128
-    - 64
-
 sac:
   batch_size: 64
   replay_buffer_capacity: 500000
@@ -54,7 +31,6 @@ sac:
   alpha_learning_rate: 0.0001
 
   use_action_mask: False
-  use_noop_head: False
   use_neural_bp: True
   use_per: True
   inference_threshold: 0.2

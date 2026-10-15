@@ -55,7 +55,7 @@ def single_agent_training_loop(env, agent, config, checkpoint_dir=None):
         curriculum.step(env, step)
         episode_reward += reward
 
-        if truncated or (terminated and (not config.use_noop_head or action == env.code.no_op_index)):
+        if truncated or terminated:
             done_logs = get_reset_logs(episode_reward, info, start_errors)
 
             episode_reward = 0
