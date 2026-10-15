@@ -1,16 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, global_mean_pool, GraphConv, GATConv
-from src.agents.common import  get_action_mask, get_qubit_mask
+from src.agents.common import  get_action_mask, get_qubit_mask, _get_batch, graph_mean_pool
 from src.agents.encoders import NeuralBPEncoder, CGNNEncoder
-
-
-def _get_batch(data, num_nodes, device):
-    if hasattr(data, "batch") and data.batch is not None:
-        return data.batch
-    return torch.zeros(num_nodes, dtype=torch.long, device=device)
-
 
 class GNNActor(nn.Module):
     def __init__(self, config, env):
@@ -52,7 +44,7 @@ class GNNActor(nn.Module):
         h = self.encoder(state)
         batch = _get_batch(state, h.size(0), h.device)
 
-        graph_feat = global_mean_pool(h, batch)
+        graph_feat = graph_mean_pool(h, state, batch)
 
         q_h = h[data_qubit_mask]
         q_graph_feat = graph_feat[batch[data_qubit_mask]]
@@ -112,7 +104,7 @@ class GNNCritic(nn.Module):
 
         h = self.encoder(state)
         batch = _get_batch(state, h.size(0), h.device)
-        graph_feat = global_mean_pool(h, batch)
+        graph_feat = graph_mean_pool(h, state, batch)
 
         q_h = h[data_qubit_mask]
         q_graph_feat = graph_feat[batch[data_qubit_mask]]

@@ -1,15 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, global_mean_pool, GraphConv, GATConv
+from torch_geometric.nn import GCNConv, GraphConv, GATConv
 
-
-def scatter_add(x, index, dim_size):
-    # Alternative to torch_scatter.scatter_add for SM_120 / torch 12.8 / Blackwell compatability
-    out_shape = (dim_size,) + x.shape[1:]
-    out = torch.zeros(out_shape, device=x.device, dtype=x.dtype)
-    out.index_add_(0, index, x)
-    return out
+from .common import scatter_add
 
 
 class CGNNEncoder(nn.Module):

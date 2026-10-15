@@ -27,14 +27,7 @@ def parallel_inference(agent_name, config, shots, task, repetition=None):
             range(config.num_workers),
             [repetition] * config.num_workers))
 
-    results = np.concatenate(chunk_results)
-
-    # with ProcessPoolExecutor(max_workers=config.num_workers) as executor:
-    #     futures = [executor.submit(run_worker, agent_name, config, chunk, get_worker_fn(task), worker_id) for worker_id, chunk in enumerate(shot_chunks)]
-    #     for future in as_completed(futures):
-    #         results.append(future.result())
-
-    return results
+    return np.concatenate(chunk_results)
 
 
 def count_failures(agent, env, inference_fn, worker_id):
@@ -87,11 +80,11 @@ def get_agent(config, env, agent_name, repetition=None):
             case "rl_nbp":
                 old = config.use_neural_bp, config.hidden_layers_gnn, config.hidden_layers_mlp, config.neural_bp_iterations
                 config.use_neural_bp = True
-                config.hidden_layers_gnn = [32,128,256]
+                config.hidden_layers_gnn = [32,128,256, 256, 256]
                 config.hidden_layers_mlp = [256,128,64]
                 config.neural_bp_iterations = 4
 
-                checkpoint = f"checkpoints/evaluate_cps/rl_nbp.pt" if repetition is None else f"checkpoints/repetition_cps/rl_nbp/rl_nbp_{repetition}.pt"
+                checkpoint = f"checkpoints/evaluate_cps/rl_nbp_tile.pt" if repetition is None else f"checkpoints/repetition_cps/rl_nbp/rl_nbp_{repetition}.pt"
                 agent = SACAgent(env, config, checkpoint=checkpoint)
 
             case "rl_cgnn":
@@ -163,7 +156,7 @@ def rl_inference(agent, env, state=None):
         obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
 
-    return info["error_free"]
+    return not info["logical_error"]
 
 
 def sl_inference(agent, env, state=None):

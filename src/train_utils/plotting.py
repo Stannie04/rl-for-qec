@@ -100,7 +100,7 @@ def get_confidence_bounds(results, window=100):
 
 def render_example_environment(config):
     env = QECEnv(config)
-    for type, error in [(env.code.logical_x, 1), (env.code.logical_z, 2)]:
+    for type, error in [(env.code.logical.x, 1), (env.code.logical.z, 2)]:
         for l in type:
             print(f"Number of qubits: {len(torch.argwhere(l).flatten())}")
 

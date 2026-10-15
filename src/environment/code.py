@@ -72,17 +72,6 @@ class QECCode(gym.Env):
         return bool((x_syndrome_clear & x_is_logical)| (z_syndrome_clear & z_is_logical))
 
 
-        # x_is_logical = (
-        #     not bool(torch.any(self.x_syndrome != 0).item())
-        #     and bool(torch.any(logical_x_state != 0).item())
-        # )
-        # z_is_logical = (
-        #     not bool(torch.any(self.z_syndrome != 0).item())
-        #     and bool(torch.any(logical_z_state != 0).item())
-        # )
-        # return torch.tensor(x_is_logical or z_is_logical, dtype=torch.bool, device=self.device)
-
-
     def is_error_free(self) -> bool:
         return self.num_x_errors == 0 and self.num_z_errors == 0
 
@@ -165,11 +154,12 @@ class QECCode(gym.Env):
 
 
     def render(self, mode="normal"):
+        breakpoint()
         if mode=="subgraph":
             render_subgraph(self.graph, self.data, self.node_to_index, x_errors=self.x_errors, z_errors=self.z_errors)
         else:
             match self.code_type:
-                case "toric" | "ldpc"| "tile": render_spring(self.graph, self.x_errors, self.z_errors, self.data, self.node_to_index)
+                case "toric" | "ldpc"| "tile": render_spring(self.graph.subgraph(self.x_subgraph_nodes), self.x_errors, self.z_errors, self.data, self.node_to_index)
                 case "surface": render_surface(self.graph, self.x_errors, self.z_errors, self.data, self.node_to_index, self.d)
                 case _: raise ValueError(f"Unknown code type: {self.code_type}")
     #

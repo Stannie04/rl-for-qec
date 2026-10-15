@@ -7,19 +7,20 @@ from src.environment.code import QECCode
 
 class QECEnv(gym.Env):
 
-    def __init__(self, config: ConfigParser, shots=None):
+    def __init__(self, config: ConfigParser, shots=None, evaluate=False):
         super().__init__()
         self.device = config.device
 
         self.code = QECCode(config)
         self.action_space = gym.spaces.Discrete(self.code.n_data)
+        self.evaluate = evaluate
         # self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.code.n_data,), dtype=np.int8)
 
         self.curriculum_error_rate = config.curriculum_start_error_rate
         self.curriculum_num_flips = 1
 
         self.episode_steps = 0
-        self.max_episode_length = config.max_episode_length
+        self.max_episode_length = config.max_episode_length if not evaluate else self.code.n_data
 
         # Information about the previous step, used for reward calculation and logging.
         self.previous_num_errors = 0
@@ -64,7 +65,7 @@ class QECEnv(gym.Env):
 
     @property
     def terminated(self):
-        return self.info["logical_error"] or self.info["error_free"]
+        return self.info["error_free"] or (not self.evaluate and self.info["logical_error"])
 
 
     @property

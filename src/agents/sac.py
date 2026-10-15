@@ -60,8 +60,6 @@ class ReplayBuffer:
         self.buffer = deque(maxlen=capacity)
 
     def push(self, state, action, reward, next_state, done):
-        # Store transition (state: Data, next_state: Data)
-        # self.buffer.append((state, action, reward, next_state, done))
         self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size):
@@ -178,9 +176,12 @@ class SACAgent:
 
         logits, log_probs, probs = self.actor(state_batch)
 
-        q1_new = self.critic1(state_batch)
-        q2_new = self.critic2(state_batch)
-        actor_loss = (probs * (self.alpha * log_probs - torch.min(q1_new, q2_new))).sum(dim=1).mean()
+        with torch.no_grad():
+            q1_new = self.critic1(state_batch)
+            q2_new = self.critic2(state_batch)
+            min_q = torch.min(q1_new, q2_new)
+
+        actor_loss = (probs * (self.alpha * log_probs - min_q)).sum(dim=1).mean()
 
         self.actor_opt.zero_grad()
         actor_loss.backward()
@@ -193,7 +194,7 @@ class SACAgent:
         self.alpha_opt.zero_grad()
         alpha_loss.backward()
         self.alpha_opt.step()
-        self.alpha = self.log_alpha.exp().item()
+        self.alpha = self.log_alpha.exp().detach()
 
         for target_param, param in zip(self.target_critic1.parameters(), self.critic1.parameters()):
             target_param.data.copy_(target_param.data * (1 - self.tau) + param.data * self.tau)

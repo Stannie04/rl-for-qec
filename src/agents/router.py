@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from torch_geometric.nn import GCNConv, global_mean_pool, GraphConv, GATConv
-from src.agents.encoders import NeuralBPEncoder, CGNNEncoder
+
+from .encoders import NeuralBPEncoder, CGNNEncoder
+from .common import graph_mean_pool
 
 
 class Router(nn.Module):
@@ -31,7 +32,7 @@ class Router(nn.Module):
 
     def forward(self, x):
         h = self.encoder(x)
-        graph_feat = global_mean_pool(h, torch.zeros(h.size(0), dtype=torch.long, device=h.device))
+        graph_feat = graph_mean_pool(h, x, torch.zeros(h.size(0)))
         return self.action_head(graph_feat)
 
 
