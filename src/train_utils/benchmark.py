@@ -2,6 +2,7 @@ from time import perf_counter
 import numpy as np
 from prettytable import PrettyTable
 import torch
+from torch.profiler import profile, record_function, ProfilerActivity
 
 from tqdm import tqdm
 
@@ -22,51 +23,44 @@ def benchmark_env(config):
 
     obs, info = env.reset()
 
-    step_times = []
-    reset_times = []
-    agent_times = []
-    buffer_times = []
-    train_times = []
-    loop_times = []
+    activities = [ProfilerActivity.CPU]
 
-    for _ in tqdm(range(10_000), desc="Benchmarking environment and agent"):
-        # loop_start = perf_counter()
-        # action, _ = agent.select_action(obs)
-        # end = perf_counter()
-        # agent_times.append(end - loop_start)
+    if agent.device.type == "cuda":
+        activities.append(ProfilerActivity.CUDA)
 
-        action = torch.tensor(env.action_space.sample())
-        start = perf_counter()
-        next_obs, reward, terminated, truncated, info = env.step(action)
-        end = perf_counter()
-        step_times.append(end - start)
+    def trace_handler(prof):
+        sort_key = "self_cuda_time_total" if agent.device.type == "cuda" else "self_cpu_time_total"
+        print(prof.key_averages(group_by_input_shape=True).table(sort_by=sort_key,row_limit=30,))
+        prof.export_chrome_trace("rl_profile.json")
 
-        # start = perf_counter()
-        # obs, info = env.reset()
-        # end = perf_counter()
-        # reset_times.append(end - start)
+    num_steps = 100 + config.batch_size
 
-        # start = perf_counter()
-        # agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
-        # end = perf_counter()
-        # buffer_times.append(end - start)
-        #
-        # start = perf_counter()
-        # agent.train_step()
-        # loop_end = perf_counter()
-        # train_times.append(loop_end - start)
-        #
-        # obs = next_obs
-        # loop_times.append(loop_end - loop_start)
+    with profile(
+            activities=activities,
+            schedule=torch.profiler.schedule(skip_first=config.batch_size + 2,wait=1,warmup=2,active=10,repeat=1,),
+            on_trace_ready=trace_handler,
+            record_shapes=True,
+            profile_memory=True,
+    ) as prof:
 
+        for _ in tqdm(
+                range(num_steps),
+                desc="Profiling RL agent",
+        ):
+            with record_function("Agent/select_action"):
+                action, _ = agent.select_action(obs)
 
-    t = PrettyTable(["Component", "Avg Time (s)", "it/s"])
+            with record_function("Environment/step"):
+                next_obs, reward, terminated, truncated, info = (env.step(action))
 
-    t.add_row(["Environment Step", f"{np.mean(step_times[1:]):.5f}", f"{1/np.mean(step_times[1:]):.2f}"])
-    # t.add_row(["Environment Reset", f"{np.mean(reset_times[1:]):.5f}", f"{1/np.mean(reset_times[1:]):.2f}"])
-    # t.add_row(["Agent Action Selection", f"{np.mean(agent_times[1:]):.5f}", f"{1/np.mean(agent_times[1:]):.2f}"])
-    # t.add_row(["Buffer Push", f"{np.mean(buffer_times[1:]):.5f}", f"{1/np.mean(buffer_times[1:]):.2f}"])
-    # t.add_row(["Agent Training Step", f"{np.mean(train_times[1:]):.5f}", f"{1/np.mean(train_times[1:]):.2f}"])
-    # t.add_row(["Total Loop", f"{np.mean(loop_times[1:]):.5f}", f"{1/np.mean(loop_times[1:]):.2f}"])
+            state = obs
 
-    print(t)
+            with record_function("ReplayBuffer/push"):
+                agent.replay_buffer.push(state,action,reward,next_obs, terminated or truncated)
+
+            with record_function("Environment/reset"):
+                obs, info = env.reset()
+
+            with record_function("Agent/train_step"):
+                agent.train_step()
+            prof.step()
