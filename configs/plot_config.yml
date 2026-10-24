@@ -1,0 +1,47 @@
+bp:
+  label: "BP"
+  color: "#0072B2"
+  linestyle: "-"
+  marker: "o"
+
+mwpm:
+  label: "MWPM"
+  color: "#7772B2"
+  linestyle: "-"
+  marker: "o"
+
+no_agent:
+  label: "No Agent"
+  color: "#999999"
+  linestyle: "-"
+  marker: "o"
+
+sl_nbp:
+  label: "SL+NBP"
+  color: "#D55E00"
+  linestyle: ":"
+  marker: "s"
+
+sl_cgnn:
+  label: "SL+CGNN"
+  color: "#D55E00"
+  linestyle: "-"
+  marker: "^"
+
+rl_nbp:
+  label: "SAC+NBP"
+  color: "#009E73"
+  linestyle: ":"
+  marker: "s"
+
+rl_cgnn:
+  label: "SAC+CGNN"
+  color: "#009E73"
+  linestyle: "-"
+  marker: "^"
+
+router:
+  label: "Router"
+  color: "#D55E00"
+  linestyle: "-"
+  marker: "^"

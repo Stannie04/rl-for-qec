@@ -8,48 +8,39 @@ from src.train_utils.inference import get_agent_and_inference
 from collections import Counter, defaultdict
 from matplotlib.colors import LogNorm
 import seaborn as sns
+import os
+from tqdm import tqdm
 
 def plot_results(results, config, path, title=None, with_error_bars=False):
 
-    plt.style.use("seaborn-v0_8-whitegrid")
-
-    colors = {"BP": "#0072B2","SL": "#D55E00", "SAC": "#009E73", "MWPM": "#0072B2","No Agent": "#999999", "Router": "#D55E00", "Optimal Router": "#E69F00"}
-    linestyles = {"BP": "-", "NBP": ":", "CGNN": "-", "MWPM": "-", "No Agent": "-", "Router": "-", "Optimal Router": "-"}
-    markers = {"BP": "o","NBP": "s", "CGNN": "^", "MWPM": "o", "No Agent": "o", "Router": "^", "Optimal Router": "^"}
-
     title = title or f"Logical Error Rate vs Physical Error Rate for {config.code_name}"
-
+    plt.style.use("seaborn-v0_8-whitegrid")
     fig, ax = plt.subplots(figsize=(8, 6))
 
     for agent_name, agent_results in results.items():
         error_rates = sorted(agent_results.keys())
-        logical_error_rates = [agent_results[e][0] for e in error_rates]
-        std = [agent_results[e][1] for e in error_rates]
 
-        if agent_name in ["BP", "MWPM", "No Agent", "Router", "Optimal Router"]:
-            color = colors[agent_name]
-            linestyle = "-"
-            marker = markers[agent_name]
+        if with_error_bars:
+            logical_error_rates = [agent_results[e][0] for e in error_rates]
+            std = [agent_results[e][1] for e in error_rates]
         else:
-            family = "SL" if agent_name.startswith("SL") else "SAC"
-            method = "NBP" if "NBP" in agent_name else "CGNN"
+            logical_error_rates = [agent_results[e] for e in error_rates]
+            std = None
 
-            color = colors[family]
-            linestyle = linestyles[method]
-            marker = markers[method]
+        agent_config = config.plot_config[agent_name]
 
         ax.errorbar(
             error_rates,
             logical_error_rates,
             yerr=std,  # <-- error bars here
-            color=color,
-            linestyle=linestyle,
-            marker=marker,
+            color=agent_config["color"],
+            linestyle=agent_config["linestyle"],
+            marker=agent_config["marker"],
             linewidth=1.5,
             markersize=7,
             capsize=4,  # width of error bar caps
             capthick=1.5,
-            label=agent_name
+            label=agent_config["label"]
         )
 
 
@@ -62,6 +53,7 @@ def plot_results(results, config, path, title=None, with_error_bars=False):
     ax.grid(True, which="both", linestyle="--", linewidth=0.6, alpha=0.6)
     ax.legend(fontsize=12)
 
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     fig.tight_layout()
     fig.savefig(path, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -100,12 +92,13 @@ def get_confidence_bounds(results, window=100):
 
 def render_example_environment(config):
     env = QECEnv(config)
-    for type, error in [(env.code.logical.x, 1), (env.code.logical.z, 2)]:
+    for type, correction in [(env.code.logical.x, 0), (env.code.logical.z, env.code.n_data)]:
+
         for l in type:
             print(f"Number of qubits: {len(torch.argwhere(l).flatten())}")
 
             for i, j in enumerate(torch.argwhere(l).flatten()):
-                env.code.flip(j.item(), error)
+                env.code.flip(j.item() + correction)
                 env.code.update_graph(env.curriculum_error_rate)
 
             env.render()
@@ -113,66 +106,31 @@ def render_example_environment(config):
 
 
 def render_mistakes(config):
-    agent_name = "bp"
+    agent_name = "rl_nbp"
 
-    mistakes = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name=agent_name)
+    mistakes = load_shots(config, dataset_type="mistakes", agent_name=agent_name)
+
     env = QECEnv(config, mistakes)
     agent, _ = get_agent_and_inference(config, env, agent_name)
 
     for idx, shot in enumerate(mistakes):
-        print(f"Rendering mistake {idx + 1}/{len(mistakes)}")
+        correct_actions = np.where(shot > 0)[1] + (np.where(shot > 0)[0] * env.code.n_data)
+        actions = []
+
         obs, info = env.reset_with_error_pattern(shot[0], shot[1])
-
+        done = info["syndrome_free"]
+        while not done:
         # Evaluate the agent on this mistake
-        error_pred = agent.select_action(obs, evaluate=True)[0]
-        print(f"Action: {error_pred}")
-        if len(error_pred) > 0:
-            env.render()
-            for a in error_pred:
-                env.step(a)
-            env.render(mode="subgraph")
+            error_pred, _ = agent.select_action(obs, evaluate=True)
+            actions.append(error_pred.item())
+            obs, reward, terminated, truncated, info = env.step(error_pred)
+            done = terminated or truncated
+
+        print(f"Correct {correct_actions} | Taken: {actions}")
 
 
-def plot_jaccard_heatmap(agent_names, jaccard):
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-
-    im = ax.imshow(
-        jaccard,
-        cmap="Reds",
-        vmin=0,
-        vmax=1,
-    )
-
-    ax.set_xticks(np.arange(len(agent_names)))
-    ax.set_yticks(np.arange(len(agent_names)))
-
-    ax.set_xticklabels(agent_names, rotation=45, ha="right")
-    ax.set_yticklabels(agent_names)
-
-    # annotate cells
-    for i in range(len(agent_names)):
-        for j in range(len(agent_names)):
-            ax.text(
-                j,
-                i,
-                f"{jaccard[i,j]:.2f}",
-                ha="center",
-                va="center",
-                color="white" if jaccard[i,j] < 0.6 else "black",
-                fontsize=10,
-            )
-
-    cbar = plt.colorbar(im)
-    cbar.set_label("Jaccard similarity")
-
-    ax.set_title("Pairwise Jaccard Similarity of Mistake Sets")
-
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_oracle_mistakes(all_mistakes):
+def plot_oracle_mistakes(config, all_mistakes, agents):
     """
     Plot the number of oracle mistakes for every pair of agents.
 
@@ -186,14 +144,7 @@ def plot_oracle_mistakes(all_mistakes):
         flat = mistakes.reshape(mistakes.shape[0], -1)
         return Counter(row.tobytes() for row in flat)
 
-    new_names = {
-        "bp": "BP",
-        "sac_nbp_big": "SAC+NBP",
-        "sac_tanner_big": "SAC+CGNN",
-        "sl_nbp_big": "SL+NBP",
-        "sl_tanner_big": "SL+CGNN",
-    }
-    all_mistakes = {new_names.get(k, k): v for k, v in all_mistakes.items()}
+    all_mistakes = {agents.get(k, k): v for k, v in all_mistakes.items()}
 
     agent_names = list(all_mistakes.keys())
     counters = {
@@ -242,4 +193,5 @@ def plot_oracle_mistakes(all_mistakes):
     plt.yticks(rotation=0)
 
     plt.tight_layout()
-    plt.savefig("results/oracle_heatmap.png", dpi=300)
+    os.makedirs(f"results/mistake_distributions/{config.code_name}/{config.noise_model}", exist_ok=True)
+    plt.savefig(f"results/mistake_distributions/{config.code_name}/{config.noise_model}/oracle_heatmap.png", dpi=300)
