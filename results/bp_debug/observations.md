@@ -52,3 +52,49 @@ What this does and does not show:
   true error by a logical operator. That is a hypothesis, not a finding. MWPM (step 6) and the convergence audit (step 5)
   should separate "BP is stuck" from "BP converges to a wrong-but-valid correction".
 - Also not shown: whether the step-2 failure criterion is right. Step 6 checks it with an independent logical check.
+
+## O2. Every plain-BP failure is non-convergence; none is a wrong-but-valid correction or an evaluation bug
+
+Step 5 (`step5_convergence_audit.py`, card BD6): iid depolarizing shots at $p=0.003$, 5000 shots per code, repo BP
+(`max_iter=30`, repo prior). Each failing shot is put in one class: (a) BP did not converge, (b) converged to a residual that
+is syndrome-free but logically wrong, (c) converged, independent check says fine, but the repo's evaluation says failure
+(an evaluation bug), (d) other.
+
+| code | n | shots | failing | frac | (a) not converged | (b) converged, logical | (c) repo eval mismatch | (d) other |
+|---|---|---|---|---|---|---|---|---|
+| d7_surface | 49 | 5000 | 242 | 0.048 | 242 (100%) | 0 | 0 | 0 |
+| 288_8_12_tile | 288 | 5000 | 388 | 0.078 | 388 (100%) | 0 | 0 | 0 |
+| 144_12_12_ldpc | 144 | 5000 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Cross-checks: the repo evaluation and the independent logical check agree on every shot (repo-only = check-only = 0 failures), and
+re-decoding along the repo path gives the same result (0 disagreements). There are also 0 shots where the `converge` flag is
+False but the residual syndrome is zero.
+
+Reading it:
+
+- **H4 (evaluation logic) is ruled out** as a cause of the surface/tile gap: the two ways of counting agree exactly.
+- **The failures are BP not settling at all** within 30 iterations, not BP settling on a wrong answer. A logical error would
+  need BP to find a syndrome-consistent correction first, and it never does.
+- The same arithmetic as F1 still holds at this $p$:
+
+$$
+\frac{\text{fail fraction}}{1-(1-p)^n}:\quad
+\text{surface } \frac{0.048}{1-0.997^{49}=0.137} = 0.35,\qquad
+\text{tile } \frac{0.078}{1-0.997^{288}=0.58} = 0.13 .
+$$
+
+  The surface value matches $\bar f_1=0.33$ from O1 (so single errors dominate there). The tile ratio is above its $\bar f_1=0.09$
+  because at 288 qubits a typical shot has about $np\approx0.86$ errors, so multi-error shots contribute too.
+
+| code | $np$ at $p=0.003$ | fail frac / P(>=1 error) | O1 $\bar f_1$ |
+|---|---|---|---|
+| d7_surface | 0.15 | 0.35 | 0.327 |
+| 288_8_12_tile | 0.86 | 0.13 | 0.093 |
+
+Figure: `o2_failure_class.png`.
+
+What this suggests, not proves: non-convergence on a boundary single error looks like the oscillation one expects when two
+boundary qubits are indistinguishable to BP (same single check). The messages stay symmetric, the hard decision flips between
+the two qubits, and the syndrome is never satisfied. This also explains why BP+OSD is fine: OSD does not need BP to converge,
+it only needs the soft information to rank columns. Open: confirm by inspecting BP's marginals for one failing boundary qubit
+(a small follow-up, not yet a card), and check what damping or min-sum scaling does (step 4).

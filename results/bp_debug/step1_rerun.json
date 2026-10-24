@@ -1,0 +1,241 @@
+{
+  "step": "step1_rerun",
+  "quick": true,
+  "seed": 0,
+  "n_per_weight": 5,
+  "max_weight": 5,
+  "max_iter": 30,
+  "codes": [
+    "d5_surface"
+  ],
+  "repo_pipeline": "src.train_utils.inference.get_agent_and_inference + classical_inference",
+  "common_pipeline": "scripts.bp_debug.common.decode_bp",
+  "p_prior_convention": "2 * curriculum_error_rate / 3",
+  "repo_decoders": [
+    "bp",
+    "bp_osd",
+    "bp_lsd",
+    "mwpm"
+  ],
+  "common_decoders": [
+    "bp",
+    "bp_osd",
+    "bp_lsd"
+  ],
+  "results": {
+    "d5_surface": {
+      "n_data": 25,
+      "curriculum_error_rate": 0.00576,
+      "p_prior": 0.00384,
+      "n_per_weight": 5,
+      "weights": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "repo": {
+        "bp": {
+          "failures": [
+            4,
+            5,
+            5,
+            5,
+            5
+          ],
+          "n": [
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "failure_fraction": [
+            0.8,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "bp_osd": {
+          "failures": [
+            0,
+            0,
+            1,
+            4,
+            4
+          ],
+          "n": [
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "failure_fraction": [
+            0.0,
+            0.0,
+            0.2,
+            0.8,
+            0.8
+          ]
+        },
+        "bp_lsd": {
+          "failures": [
+            0,
+            0,
+            1,
+            4,
+            4
+          ],
+          "n": [
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "failure_fraction": [
+            0.0,
+            0.0,
+            0.2,
+            0.8,
+            0.8
+          ]
+        },
+        "mwpm": {
+          "failures": [
+            0,
+            0,
+            1,
+            4,
+            4
+          ],
+          "n": [
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "failure_fraction": [
+            0.0,
+            0.0,
+            0.2,
+            0.8,
+            0.8
+          ]
+        }
+      },
+      "repo_errors": {},
+      "common": {
+        "bp": {
+          "failures": [
+            4,
+            5,
+            5,
+            5,
+            5
+          ],
+          "n": [
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "failure_fraction": [
+            0.8,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "bp_osd": {
+          "failures": [
+            0,
+            0,
+            1,
+            4,
+            4
+          ],
+          "n": [
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "failure_fraction": [
+            0.0,
+            0.0,
+            0.2,
+            0.8,
+            0.8
+          ]
+        },
+        "bp_lsd": {
+          "failures": [
+            0,
+            0,
+            1,
+            4,
+            4
+          ],
+          "n": [
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "failure_fraction": [
+            0.0,
+            0.0,
+            0.2,
+            0.8,
+            0.8
+          ]
+        }
+      },
+      "disagreements": {
+        "bp": {
+          "per_weight": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "total": 0,
+          "n": 25
+        },
+        "bp_osd": {
+          "per_weight": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "total": 0,
+          "n": 25
+        },
+        "bp_lsd": {
+          "per_weight": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "total": 0,
+          "n": 25
+        }
+      }
+    }
+  }
+}

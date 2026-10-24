@@ -1,0 +1,169 @@
+{
+  "module": "step5_convergence_audit",
+  "p": 0.003,
+  "seed": 0,
+  "n_shots": 5000,
+  "max_iter": 30,
+  "prior": "2*curriculum_error_rate/3 (repo BPAgent default)",
+  "quick": false,
+  "codes": {
+    "d7_surface": {
+      "code_name": "d7_surface",
+      "n": 49,
+      "k": 1,
+      "d": 7,
+      "n_shots": 5000,
+      "p": 0.003,
+      "p_prior": 0.001959183673469388,
+      "max_iter": 30,
+      "n_failing": 242,
+      "failing_fraction": 0.0484,
+      "n_failure_independent": 242,
+      "n_failure_repo": 242,
+      "n_failure_repo_subset": 242,
+      "n_repo_path_disagreements": 0,
+      "n_repo_only": 0,
+      "n_check_only": 0,
+      "convergence": {
+        "n_not_converged_x": 113,
+        "n_not_converged_z": 133,
+        "n_not_converged_x_but_x_syndrome_free": 0,
+        "n_not_converged_z_but_z_syndrome_free": 0
+      },
+      "classes": {
+        "a_not_converged": {
+          "count": 242,
+          "fraction_of_failing": 1.0,
+          "fraction_of_shots": 0.0484,
+          "examples": [
+            11,
+            21,
+            23
+          ]
+        },
+        "b_converged_logical": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        },
+        "c_evaluation_bug": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        },
+        "d_other": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        }
+      }
+    },
+    "288_8_12_tile": {
+      "code_name": "288_8_12_tile",
+      "n": 288,
+      "k": 8,
+      "d": 12,
+      "n_shots": 5000,
+      "p": 0.003,
+      "p_prior": 0.0003333333333333333,
+      "max_iter": 30,
+      "n_failing": 388,
+      "failing_fraction": 0.0776,
+      "n_failure_independent": 388,
+      "n_failure_repo": 388,
+      "n_failure_repo_subset": 388,
+      "n_repo_path_disagreements": 0,
+      "n_repo_only": 0,
+      "n_check_only": 0,
+      "convergence": {
+        "n_not_converged_x": 193,
+        "n_not_converged_z": 203,
+        "n_not_converged_x_but_x_syndrome_free": 0,
+        "n_not_converged_z_but_z_syndrome_free": 0
+      },
+      "classes": {
+        "a_not_converged": {
+          "count": 388,
+          "fraction_of_failing": 1.0,
+          "fraction_of_shots": 0.0776,
+          "examples": [
+            1,
+            17,
+            18
+          ]
+        },
+        "b_converged_logical": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        },
+        "c_evaluation_bug": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        },
+        "d_other": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        }
+      }
+    },
+    "144_12_12_ldpc": {
+      "code_name": "144_12_12_ldpc",
+      "n": 144,
+      "k": 12,
+      "d": 12,
+      "n_shots": 5000,
+      "p": 0.003,
+      "p_prior": 0.0006666666666666666,
+      "max_iter": 30,
+      "n_failing": 0,
+      "failing_fraction": 0.0,
+      "n_failure_independent": 0,
+      "n_failure_repo": 0,
+      "n_failure_repo_subset": 0,
+      "n_repo_path_disagreements": 0,
+      "n_repo_only": 0,
+      "n_check_only": 0,
+      "convergence": {
+        "n_not_converged_x": 0,
+        "n_not_converged_z": 0,
+        "n_not_converged_x_but_x_syndrome_free": 0,
+        "n_not_converged_z_but_z_syndrome_free": 0
+      },
+      "classes": {
+        "a_not_converged": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        },
+        "b_converged_logical": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        },
+        "c_evaluation_bug": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        },
+        "d_other": {
+          "count": 0,
+          "fraction_of_failing": 0.0,
+          "fraction_of_shots": 0.0,
+          "examples": []
+        }
+      }
+    }
+  }
+}
