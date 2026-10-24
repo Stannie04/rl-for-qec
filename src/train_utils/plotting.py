@@ -9,9 +9,16 @@ from collections import Counter, defaultdict
 from matplotlib.colors import LogNorm
 import seaborn as sns
 import os
+import json
 from tqdm import tqdm
 
 def plot_results(results, config, path, title=None, with_error_bars=False):
+
+    # Dump the results to a json file for later analysis
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    json_path = os.path.splitext(path)[0] + ".json"
+    with open(json_path, "w") as f:
+        json.dump(results, f, indent=4)
 
     title = title or f"Logical Error Rate vs Physical Error Rate for {config.code_name}"
     plt.style.use("seaborn-v0_8-whitegrid")
