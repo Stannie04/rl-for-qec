@@ -152,3 +152,46 @@ $$
 | d7_surface | 0.245 | 0.43 | 0.437 |
 
 Caveat: for d5 I have no O1 number yet (step 2 ran on the repo's three codes), so no prediction is made there.
+
+## O4. No BP setting fixes it: 50x more iterations, min-sum, serial schedule and scaling all leave the failure rate where it was
+
+Step 4 (`step4_config_sweep.py`, card BD5): iid depolarizing at $p=0.003$, 5000 shots per code, prior matched to the
+true rate ($2p/3=0.002$), one setting changed at a time around the default (`max_iter=30`, product-sum, parallel, scaling 1.0).
+All options were checked as valid in `ldpc` 2.4.1. Failure fraction (independent check) equals the non-converged fraction in every row.
+
+| setting | d7_surface | 288_8_12_tile | 144_12_12_ldpc |
+|---|---|---|---|
+| max_iter = 10 | 0.0484 | 0.0776 | 0 |
+| max_iter = 30 (default) | 0.0484 | 0.0776 | 0 |
+| max_iter = 100 | 0.0484 | 0.0776 | 0 |
+| max_iter = 500 | 0.0484 | 0.0776 | 0 |
+| product-sum (default) | 0.0484 | 0.0776 | 0 |
+| min-sum, scaling 1.0 | 0.0484 | 0.0774 | 0 |
+| min-sum, scaling 0.9 | 0.0484 | 0.0776 | 0 |
+| min-sum, scaling 0.75 | 0.0484 | 0.0780 | 0 |
+| min-sum, scaling 0.625 | 0.0484 | 0.0784 | 0 |
+| min-sum, scaling 0.5 | 0.0522 | 0.1612 | 0 |
+| schedule parallel (default) | 0.0484 | 0.0776 | 0 |
+| schedule serial | 0.0482 | 0.0772 | 0 |
+
+Figure: `o4_config_sweep.png`.
+
+Reading it:
+
+- **H3 (BP configuration) is ruled out as a fix, and as the cause.** The number of iterations does not matter at all: going from 10
+  to 500 gives the identical failure fraction to four digits. If BP were converging slowly, 500 iterations would rescue some shots. It
+  rescues none. A shot that has not converged by iteration 10 never converges, so these shots are in a stationary or oscillating
+  state from the start, not on a slow path.
+- Min-sum and the serial schedule change failure by at most 0.0004, which is within sampling noise for 5000 shots, where
+
+$$
+\sigma \approx \sqrt{\frac{\hat q(1-\hat q)}{N}} = \sqrt{\frac{0.0484\cdot 0.9516}{5000}} \approx 0.003 .
+$$
+
+- A strong scaling factor (0.5) makes tile much worse (0.078 to 0.161). Under-weighted messages never reach a consistent state.
+- The 144_12_12_ldpc code is at zero for every setting, so the gross code is not a sensitive probe for any of this.
+
+Together with O2 (failures are non-convergence) and O3 (MWPM is fine), this says: the decoder fails structurally on boundary
+qubits, and no knob in `BpDecoder` that was swept changes that. Not swept: damping or memory-BP (not exposed in this `ldpc` version
+as far as I could check), and a matched-prior sweep (step 3, still running). A decoder that does not need BP to converge,
+such as BP+OSD or BP+LSD, is the natural fix, and it is what the original three-codes results already show works.

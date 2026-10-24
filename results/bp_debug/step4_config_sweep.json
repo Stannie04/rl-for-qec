@@ -1,0 +1,479 @@
+{
+ "meta": {
+  "codes": [
+   "d7_surface",
+   "288_8_12_tile",
+   "144_12_12_ldpc"
+  ],
+  "n_shots": 5000,
+  "seed": 0,
+  "p_eval": 0.003,
+  "prior": 0.002,
+  "base": {
+   "max_iter": 30,
+   "bp_method": "product_sum",
+   "ms_scaling_factor": 1.0,
+   "schedule": "parallel"
+  },
+  "grid": {
+   "max_iter": [
+    10,
+    30,
+    100,
+    500
+   ],
+   "bp_method": [
+    "product_sum",
+    "minimum_sum"
+   ],
+   "ms_scaling_factor": [
+    0.5,
+    0.625,
+    0.75,
+    0.9,
+    1.0
+   ],
+   "schedule": [
+    "parallel",
+    "serial"
+   ]
+  }
+ },
+ "results": {
+  "d7_surface": [
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=10",
+    "max_iter": 10,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=30",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=100",
+    "max_iter": 100,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=500",
+    "max_iter": 500,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "bp_method",
+    "setting": "bp_method=product_sum",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "bp_method",
+    "setting": "bp_method=minimum_sum",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.5 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.5,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0522,
+    "non_converged_fraction": 0.0522
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.625 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.625,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.75 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.75,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.9 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.9,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=1.0 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "schedule",
+    "setting": "schedule=parallel",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0484,
+    "non_converged_fraction": 0.0484
+   },
+   {
+    "factor": "schedule",
+    "setting": "schedule=serial",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "serial",
+    "skipped": false,
+    "failure_fraction": 0.0482,
+    "non_converged_fraction": 0.0482
+   }
+  ],
+  "288_8_12_tile": [
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=10",
+    "max_iter": 10,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0776,
+    "non_converged_fraction": 0.0776
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=30",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0776,
+    "non_converged_fraction": 0.0776
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=100",
+    "max_iter": 100,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0776,
+    "non_converged_fraction": 0.0776
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=500",
+    "max_iter": 500,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0776,
+    "non_converged_fraction": 0.0776
+   },
+   {
+    "factor": "bp_method",
+    "setting": "bp_method=product_sum",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0776,
+    "non_converged_fraction": 0.0776
+   },
+   {
+    "factor": "bp_method",
+    "setting": "bp_method=minimum_sum",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0774,
+    "non_converged_fraction": 0.0774
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.5 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.5,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.1612,
+    "non_converged_fraction": 0.1612
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.625 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.625,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0784,
+    "non_converged_fraction": 0.0784
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.75 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.75,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.078,
+    "non_converged_fraction": 0.078
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.9 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.9,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0776,
+    "non_converged_fraction": 0.0776
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=1.0 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0774,
+    "non_converged_fraction": 0.0774
+   },
+   {
+    "factor": "schedule",
+    "setting": "schedule=parallel",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0776,
+    "non_converged_fraction": 0.0776
+   },
+   {
+    "factor": "schedule",
+    "setting": "schedule=serial",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "serial",
+    "skipped": false,
+    "failure_fraction": 0.0772,
+    "non_converged_fraction": 0.0772
+   }
+  ],
+  "144_12_12_ldpc": [
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=10",
+    "max_iter": 10,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=30",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=100",
+    "max_iter": 100,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "max_iter",
+    "setting": "max_iter=500",
+    "max_iter": 500,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "bp_method",
+    "setting": "bp_method=product_sum",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "bp_method",
+    "setting": "bp_method=minimum_sum",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.5 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.5,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.625 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.625,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.75 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.75,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=0.9 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 0.9,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "ms_scaling_factor",
+    "setting": "ms_scaling_factor=1.0 (minimum_sum)",
+    "max_iter": 30,
+    "bp_method": "minimum_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "schedule",
+    "setting": "schedule=parallel",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "parallel",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   },
+   {
+    "factor": "schedule",
+    "setting": "schedule=serial",
+    "max_iter": 30,
+    "bp_method": "product_sum",
+    "ms_scaling_factor": 1.0,
+    "schedule": "serial",
+    "skipped": false,
+    "failure_fraction": 0.0,
+    "non_converged_fraction": 0.0
+   }
+  ]
+ }
+}
