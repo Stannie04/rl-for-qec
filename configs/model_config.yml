@@ -1,7 +1,8 @@
 sac:
-  batch_size: 64
+  batch_size: 128
   replay_buffer_capacity: 500000
-  initial_alpha: 0.3
+  initial_alpha: 0.1
+  entropy_factor: 0.5
   gamma: 0.99
   tau: 0.005
 
@@ -14,19 +15,21 @@ sac:
     - 256
     - 256
 
+  # Used for the dueling MLPs + GRU in the neural BP decoder
+  neural_bp_iterations: 4
+  neural_bp_hidden_dim: 64
+
   hidden_layers_mlp:
     - 256
     - 128
     - 64
 
   train_frequency: 1
-  discrete: True
 
   actor_learning_rate: 0.0001
-  critic_learning_rate: 0.0001
+  critic_learning_rate: 0.0003
   alpha_learning_rate: 0.0001
 
-  use_action_mask: False
   use_neural_bp: True
   use_per: True
   inference_threshold: 0.2
@@ -34,7 +37,7 @@ sac:
 moe:
   moe_experts:
     - bp
-    - sac_nbp
+    - rl_nbp
 
   moe_hidden_layers_gnn:
     - 32
@@ -50,6 +53,10 @@ moe:
     - 128
     - 64
 
+  router_sl_test_fraction: 0.2
+  router_sl_epochs: 100
+  router_sl_batch_size: 128
+  router_sl_learning_rate: 0.0002
   moe_learning_rate: 0.00001
   latency_penalty_factor: 10 # 0 for no penalty
 

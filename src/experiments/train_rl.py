@@ -98,14 +98,11 @@ def train_rl(config):
     os.mkdir(checkpoint_dir)
 
     try:
-        shots = create_dataset_from_curriculum(config, num_samples=config.num_timesteps, noise_model="bit_flip", with_mistakes=False, save=False)
+        shots = create_dataset_from_curriculum(config, num_samples=config.num_timesteps, specialized=config.specialize_agent, save=False)
         env = QECEnv(config, shots)
         agent = SACAgent(env, config)
 
-        single_agent_training_loop(env, agent, config, checkpoint_dir)
-
-        if config.wandb_logging:
-            wandb.finish()
+        rl_training_loop(env, agent, config, checkpoint_dir)
 
     except KeyboardInterrupt:
         if not os.listdir(checkpoint_dir):

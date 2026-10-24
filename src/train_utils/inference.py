@@ -1,5 +1,5 @@
 import torch
-from src.agents import SACAgent, BPAgent, BPOSDAgent, BPLSDAgent, MWPMAgent, SLAgent
+from src.agents import SACAgent, BPAgent, BPOSDAgent, BPLSDAgent, MWPMAgent, SLAgent, RouterNetwork
 from src.environment import QECEnv
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
@@ -13,7 +13,12 @@ def get_worker_fn(task):
         case _: raise NotImplementedError(f"Task {task} is not implemented.")
 
 
-def parallel_inference(agent_name, config, shots, task, repetition=None):
+def inference(agent_name, config, shots, task, repetition=None, parallel=True, checkpoint=None):
+    worker_fn = get_worker_fn(task)
+
+    if not parallel or config.num_workers == 1:
+        result = run_worker(agent_name, config, shots, worker_fn, worker_id=0, repetition=repetition, checkpoint=checkpoint)
+        return result if task == "mistakes" else np.array(result)
 
     shot_chunks = np.array_split(shots, config.num_workers)
 
@@ -23,45 +28,47 @@ def parallel_inference(agent_name, config, shots, task, repetition=None):
             [agent_name]*config.num_workers,
             [config] * config.num_workers,
             shot_chunks,
-            [get_worker_fn(task)] * config.num_workers,
+            [worker_fn] * config.num_workers,
             range(config.num_workers),
-            [repetition] * config.num_workers))
+            [repetition] * config.num_workers,
+            [checkpoint] * config.num_workers,
+        ))
+
+    if task == "mistakes":
+        return [mistake for chunk in chunk_results for mistake in chunk]
 
     return np.concatenate(chunk_results)
 
 
 def count_failures(agent, env, inference_fn, worker_id):
-    # failures = 0
-    # for _ in tqdm(env.shots, desc=f"Worker {worker_id}", position=worker_id, leave=True):
-    #     failures += not inference_fn(agent, env)
-    # return failures
-
     failures = np.empty(len(env.shots), dtype=bool)
-    for i, _ in enumerate(tqdm(env.shots, desc=f"Worker {worker_id}", position=worker_id, leave=True)):
+    for i, _ in enumerate(tqdm(env.shots, desc=f"Worker {worker_id}", position=worker_id, leave=False)):
         failures[i] = not inference_fn(agent, env)
     return failures
 
 
 def collect_mistakes(agent, env, inference_fn, worker_id):
     mistakes = []
-    for x, z in tqdm(env.shots, desc=f"Worker {worker_id}", position=worker_id, leave=True):
+    for x, z in tqdm(env.shots, desc=f"Worker {worker_id}", position=worker_id, leave=False):
         if not inference_fn(agent, env):
             mistakes.append((x, z))
     return mistakes
 
 
-def run_worker(agent_name, config, shots, worker_fn, worker_id, repetition=None):
+def run_worker(agent_name, config, shots, worker_fn, worker_id, repetition=None, checkpoint=None):
     env = QECEnv(config, shots)
-    agent, inference_fn = get_agent_and_inference(config, env, agent_name, repetition)
+    agent, inference_fn = get_agent_and_inference(config, env, agent_name, repetition, checkpoint)
     return worker_fn(agent, env, inference_fn, worker_id)
 
 
-def get_agent_and_inference(config, env, agent_name, repetition=None):
-    agent = get_agent(config, env, agent_name, repetition)
-    inference_fn = None
+def get_agent_and_inference(config, env, agent_name, repetition=None, checkpoint=None):
+    agent = get_agent(config, env, agent_name, repetition, checkpoint=checkpoint)
+    inference_fn = rl_inference # Default inference function for RL agents, and returned if the agent is already an instance of an agent class.
     if type(agent_name) == str:
         if agent_name.startswith("bp") or agent_name.startswith("mwpm"):
             inference_fn = classical_inference
+        elif agent_name.startswith("router"):
+            inference_fn = router_inference
         elif agent_name.startswith("sac") or agent_name.startswith("rl"):
             inference_fn = rl_inference
         elif agent_name.startswith("sl"):
@@ -72,47 +79,53 @@ def get_agent_and_inference(config, env, agent_name, repetition=None):
     return agent, inference_fn
 
 
-def get_agent(config, env, agent_name, repetition=None):
+def get_agent(config, env, agent_name, repetition=None, checkpoint=None):
     if type(agent_name) == str:
-        old = config.use_neural_bp, config.hidden_layers_gnn, config.hidden_layers_mlp, config.neural_bp_iterations
+        old = config.use_neural_bp, config.hidden_layers_cgnn, config.hidden_layers_mlp, config.neural_bp_iterations, config.neural_bp_hidden_dim
+        checkpoint = checkpoint if checkpoint is not None else f"checkpoints/evaluate_cps/{agent_name}_{config.code_name}.pt" if repetition is None else f"checkpoints/repetition_cps/{agent_name}/{agent_name}_{repetition}.pt"
         match agent_name:
 
-            case "rl_nbp":
-                old = config.use_neural_bp, config.hidden_layers_gnn, config.hidden_layers_mlp, config.neural_bp_iterations
-                config.use_neural_bp = True
-                config.hidden_layers_gnn = [32,128,256, 256, 256]
-                config.hidden_layers_mlp = [256,128,64]
-                config.neural_bp_iterations = 4
+            case "rl_hpo": return SACAgent(env, config, checkpoint=checkpoint)
 
-                checkpoint = f"checkpoints/evaluate_cps/rl_nbp_tile.pt" if repetition is None else f"checkpoints/repetition_cps/rl_nbp/rl_nbp_{repetition}.pt"
+            case "router":
+                checkpoint = f"checkpoints/evaluate_cps/moe_{config.code_name}_router.pt" if checkpoint is None else checkpoint
+                router = RouterNetwork(config, env, checkpoint)
+                expert_list, inference_list = [], []
+                for decoder_name in config.moe_experts:
+                    decoder, inference = get_agent_and_inference(config, env, decoder_name)
+                    expert_list.append(decoder)
+                    inference_list.append(inference)
+                agent = (router, expert_list, inference_list)
+
+            case "rl_nbp":
+                config.use_neural_bp = True
+                config.hidden_layers_mlp = [256,128,64]
+                config.neural_bp_iterations = 4 if config.code_name == "288_8_12_tile" else 8
+                config.neural_bp_hidden_dim = 64 if config.code_name == "288_8_12_tile" else 128
+
                 agent = SACAgent(env, config, checkpoint=checkpoint)
 
             case "rl_cgnn":
-                old = config.use_neural_bp, config.hidden_layers_gnn, config.hidden_layers_mlp, config.neural_bp_iterations
-                config.hidden_layers_gnn = [32,128,256,512,512,256,256]
+                config.hidden_layers_cgnn = [32,128,256,512,512,256,256]
                 config.hidden_layers_mlp = [256,128,64]
                 config.use_neural_bp = False
                 config.neural_bp_iterations = 8
+                config.neural_bp_hidden_dim = 128
 
-                checkpoint = f"checkpoints/evaluate_cps/rl_cgnn.pt" if repetition is None else f"checkpoints/repetition_cps/rl_cgnn/rl_cgnn_{repetition}.pt"
                 agent = SACAgent(env, config, checkpoint=checkpoint)
 
             case "sl_nbp":
-
-                config.hidden_layers_gnn = [32,128,256,512,512,256,256]
                 config.hidden_layers_mlp = [256,128,64]
                 config.use_neural_bp = True
                 config.neural_bp_iterations = 8
-                checkpoint = f"checkpoints/evaluate_cps/sl_nbp.pt" if repetition is None else f"checkpoints/repetition_cps/sl_nbp/sl_nbp_{repetition}.pt"
+                config.neural_bp_hidden_dim = 128
                 agent = SLAgent(config, env, nbp_checkpoint=checkpoint).to(config.device)
                 agent.eval()
 
             case "sl_cgnn":
-                old = config.use_neural_bp, config.hidden_layers_gnn, config.hidden_layers_mlp, config.neural_bp_iterations
-                config.hidden_layers_gnn = [32,128,256,512,512,256,256]
+                config.hidden_layers_cgnn = [32,128,256,512,512,256,256]
                 config.hidden_layers_mlp = [256,128,64]
                 config.use_neural_bp = False
-                checkpoint = f"checkpoints/evaluate_cps/sl_cgnn.pt" if repetition is None else f"checkpoints/repetition_cps/sl_cgnn/sl_cgnn_{repetition}.pt"
                 agent = SLAgent(config, env, cgnn_checkpoint=checkpoint).to(config.device)
                 agent.eval()
 
@@ -122,7 +135,7 @@ def get_agent(config, env, agent_name, repetition=None):
             case "bp_lsd": return BPLSDAgent(env, config)
             case _: raise NotImplementedError(f"Agent {agent_name} does not exist.")
 
-        config.use_neural_bp, config.hidden_layers_gnn, config.hidden_layers_mlp, config.neural_bp_iterations = old
+        config.use_neural_bp, config.hidden_layers_cgnn, config.hidden_layers_mlp, config.neural_bp_iterations, config.neural_bp_hidden_dim = old
         return agent
     else:
         return agent_name
@@ -131,32 +144,29 @@ def get_agent(config, env, agent_name, repetition=None):
 def classical_inference(agent, env, state=None):
 
     obs, info = state if state is not None else env.reset()
-    done = info["error_free"]
 
-    while not done:
-        error_pred, _ = agent.select_action(obs)
+    error_pred, _ = agent.select_action(obs)
 
-        if len(error_pred) == 0:
-            break
+    if len(error_pred) == 0:
+        return env.code.is_syndrome_free() and not env.code.has_logical_error()
 
-        for a in error_pred:
-            obs, reward, terminated, truncated, info = env.step(a)
-            done = terminated or truncated
+    for a in error_pred:
+        env.step(a)
 
-    return info["error_free"]
+    return env.code.is_syndrome_free() and not env.code.has_logical_error()
 
 
 def rl_inference(agent, env, state=None):
 
     obs, info = state if state is not None else env.reset()
-    done = info["error_free"]
+    done = info["syndrome_free"]
 
     while not done:
         action, _ = agent.select_action(obs, evaluate=True)
         obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
 
-    return not info["logical_error"]
+    return env.code.is_syndrome_free() and not env.code.has_logical_error()
 
 
 def sl_inference(agent, env, state=None):
@@ -174,3 +184,19 @@ def sl_inference(agent, env, state=None):
     true_sorted = torch.sort(true_indices).values
 
     return torch.equal(pred_sorted, true_sorted)
+
+
+def router_inference(agent, env, state=None):
+    """NOTE: @ref agent consists of a router network, as well as a list of its experts."""
+
+    router, expert_list, inference_list = agent
+
+    obs, info = state if state is not None else env.reset()
+
+    if info["syndrome_free"]:
+        return True
+
+    with torch.no_grad():
+        action = torch.argmin(router(obs), dim=-1).item()
+
+    return inference_list[action](expert_list[action], env, state=(obs, info))

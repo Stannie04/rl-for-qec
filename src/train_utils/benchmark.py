@@ -42,11 +42,7 @@ def benchmark_env(config):
             record_shapes=True,
             profile_memory=True,
     ) as prof:
-
-        for _ in tqdm(
-                range(num_steps),
-                desc="Profiling RL agent",
-        ):
+        for _ in tqdm(range(num_steps),desc="Profiling RL agent",):
             with record_function("Agent/select_action"):
                 action, _ = agent.select_action(obs)
 
