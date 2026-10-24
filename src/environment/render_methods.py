@@ -3,6 +3,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import io
 from dataclasses import dataclass
+from PIL import Image
 
 
 @dataclass(frozen=True)
@@ -20,58 +21,63 @@ class RenderInfo:
     legend: bool = True
     title: str = None
     save_path: str = None
+    return_fig: bool = False
 
 
-def _get_subgraph_of_indices(graph, indices):
+def _get_subgraph_of_indices(code, indices):
     # Return the subgraph of the Tanner graph containing only the specified qubit indices and their neighboring checks.
+    if indices is None:
+        indices = torch.where(code.x_errors == 1)[0].tolist()
+
     nodes_to_include = set()
     for idx in indices:
         qubit_node = f"q{idx}"
         nodes_to_include.add(qubit_node)
-        neighbors = graph.neighbors(qubit_node)
+        neighbors = code.graph.neighbors(qubit_node)
         nodes_to_include.update(neighbors)
 
     # Filter on only q and z check nodes to simplify visualization
-    nodes_to_include = {n for n in nodes_to_include if graph.nodes[n]["node_type"] in ("qubit", "z_check")}
+    nodes_to_include = {n for n in nodes_to_include if code.graph.nodes[n]["node_type"] in ("qubit", "z_check")}
 
-    return graph.subgraph(nodes_to_include)
+    return code.graph.subgraph(nodes_to_include)
 
 
 def _is_node_type(graph, node, node_type):
     return graph.nodes[node]["node_type"] == node_type
 
-def _get_render_groups(graph, x_errors, z_errors, data, node_to_index):
+
+def _get_render_groups(code):
     # Separate node lists
-    qubits = [n for n in graph.nodes if _is_node_type(graph, n, "qubit")] #and x_errors[int(n[1:])] == 1]
-    x_checks = [n for n in graph.nodes if _is_node_type(graph, n, "x_check")] #and data.x[node_to_index[n], 3] == 1]
-    z_checks = [n for n in graph.nodes if _is_node_type(graph, n, "z_check")] #and data.x[node_to_index[n], 4] == 1]
+    qubits = [n for n in code.graph.nodes if _is_node_type(code.graph, n, "qubit")] #and x_errors[int(n[1:])] == 1]
+    x_checks = [n for n in code.graph.nodes if _is_node_type(code.graph, n, "x_check")] #and data.x[node_to_index[n], 3] == 1]
+    z_checks = [n for n in code.graph.nodes if _is_node_type(code.graph, n, "z_check")] #and data.x[node_to_index[n], 4] == 1]
 
     qubit_colors = [
-        "purple" if x_errors[int(n[1:])] and z_errors[int(n[1:])]
-        else "blue" if x_errors[int(n[1:])]
-        else "orange" if z_errors[int(n[1:])]
+        "purple" if code.x_errors[int(n[1:])] and code.z_errors[int(n[1:])]
+        else "blue" if code.x_errors[int(n[1:])]
+        else "orange" if code.z_errors[int(n[1:])]
         else "black"
         for n in qubits
     ]
 
-    x_check_colors = ["red" if data.x[node_to_index[n], 3] == 1 else "lightcoral" for n in x_checks]
-    z_check_colors = ["blue" if data.x[node_to_index[n], 4] == 1 else "lightblue" for n in z_checks]
+    x_check_colors = ["red" if code.data.x[code.node_to_index[n], 3] == 1 else "lightcoral" for n in x_checks]
+    z_check_colors = ["blue" if code.data.x[code.node_to_index[n], 4] == 1 else "lightblue" for n in z_checks]
 
-    def get_edge_error(q1, q2):
-        qubit, check = (q1, q2) if _is_node_type(graph, q1, "qubit") else (q2, q1)
+    def _get_edge_error(q1, q2):
+        qubit, check = (q1, q2) if _is_node_type(code.graph, q1, "qubit") else (q2, q1)
         # Sanity check to ensure homogeneity of the graph.
-        assert _is_node_type(graph, qubit, "qubit") and not _is_node_type(graph, check, "qubit")
+        assert _is_node_type(code.graph, qubit, "qubit") and not _is_node_type(code.graph, check, "qubit")
 
         qubit_idx = int(qubit[1:])
         return (
-            1 if x_errors[qubit_idx] and _is_node_type(graph, check, "z_check")
-            else 2 if z_errors[qubit_idx] and _is_node_type(graph, check, "x_check")
+            1 if code.x_errors[qubit_idx] and _is_node_type(code.graph, check, "z_check")
+            else 2 if code.z_errors[qubit_idx] and _is_node_type(code.graph, check, "x_check")
             else 0
         )
 
     edge_types = {0: [], 1: [], 2: []}
-    for u, v in graph.edges:
-        edge_types[get_edge_error(u, v)].append((u, v))
+    for u, v in code.graph.edges:
+        edge_types[_get_edge_error(u, v)].append((u, v))
 
     node_groups = [
         {"nodelist": qubits, "node_color": qubit_colors, "node_shape": "o", "node_size": 200, "label": "Data qubits"},
@@ -112,25 +118,29 @@ def _draw_graph(render_info: RenderInfo):
 
     plt.axis('off')
 
-    if not render_info.save_path:
-        plt.show()
-    else:
+
+    if render_info.return_fig:
         buf = io.BytesIO()
         plt.savefig(buf, format="png", bbox_inches="tight", dpi=150)
         buf.seek(0)
+        img = Image.open(buf).convert("RGB")
+        plt.close(fig)
+        return img
 
+    plt.show()
     plt.close(fig)
+    return None
 
 
-def render_subgraph(graph, data, node_to_index, indices=None, x_errors=None, z_errors=None, with_labels=False, overlap=None):
+def render_subgraph(code, indices=None, title=None, return_fig=False):
 
-    subgraph = _get_subgraph_of_indices(graph, torch.where(x_errors == 1)[0].tolist()) if indices is None else _get_subgraph_of_indices(graph, indices)
+    subgraph = _get_subgraph_of_indices(code, indices)
 
     qubits = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"]
-    x_checks = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "x_check" and data.x[node_to_index[n], 3] == 1]
-    x_checks_syndrome = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "x_check" and data.x[node_to_index[n], 3] == 0]
-    z_checks = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and data.x[node_to_index[n], 4] == 1]
-    z_checks_syndrome = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and data.x[node_to_index[n], 4] == 0]
+    x_checks = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "x_check" and code.data.x[code.node_to_index[n], 3] == 1]
+    x_checks_syndrome = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "x_check" and code.data.x[code.node_to_index[n], 3] == 0]
+    z_checks = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and code.data.x[code.node_to_index[n], 4] == 1]
+    z_checks_syndrome = [n for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "z_check" and code.data.x[code.node_to_index[n], 4] == 0]
 
     # Example key-value pair: "q17" -> "17"
     # qubit_labels = {n: str(int(n[1:])) for n in subgraph.nodes if subgraph.nodes[n]["node_type"] == "qubit"} if with_labels else None
@@ -145,80 +155,83 @@ def render_subgraph(graph, data, node_to_index, indices=None, x_errors=None, z_e
 
     render_info = RenderInfo(
         graph=subgraph,
-        x_errors=x_errors,
-        z_errors=z_errors,
-        data=data,
-        node_to_index=node_to_index,
+        x_errors=code.x_errors,
+        z_errors=code.z_errors,
+        data=code.data,
+        node_to_index=code.node_to_index,
         pos=nx.spring_layout(subgraph, seed=42),
         figsize=(8, 6),
         edge_groups=None,
         node_groups=node_groups,
         labels=None,
-        legend=True,
-        title=f"Pattern {overlap}" if overlap else None,
-        save_path=None
+        legend=False,
+        title=title,
+        save_path=None,
+        return_fig=return_fig,
     )
 
-    _draw_graph(render_info)
+    return _draw_graph(render_info)
 
 
-def render_spring(graph, x_errors, z_errors, data, node_to_index):
+def render_spring(code, title=None, return_fig=False):
 
-    node_groups, edge_groups = _get_render_groups(graph, x_errors, z_errors, data, node_to_index)
+    node_groups, edge_groups = _get_render_groups(code)
 
     render_info = RenderInfo(
-        graph=graph,
-        x_errors=x_errors,
-        z_errors=z_errors,
-        data=data,
-        node_to_index=node_to_index,
-        pos=nx.spring_layout(graph, seed=42),
+        graph=code.graph,
+        x_errors=code.x_errors,
+        z_errors=code.z_errors,
+        data=code.data,
+        node_to_index=code.node_to_index,
+        pos=nx.spring_layout(code.graph, seed=42),
         figsize=(10, 8),
         edge_groups=edge_groups,
         node_groups=node_groups,
         labels=None,
         legend=True,
-        title="LDPC Code Tanner Graph",
-        save_path=None
+        title=title,
+        save_path=None,
+        return_fig=return_fig,
     )
 
-    _draw_graph(render_info)
+    return _draw_graph(render_info)
 
 
-def render_surface(graph, x_errors, z_errors, data, node_to_index, distance):
+def render_surface(code, title=None, return_fig=False):
 
     # First, obtain the positions of the qubits in a d x d grid
-    qubits = [n for n, t in graph.nodes(data="node_type") if t == "qubit"]
+    qubits = [n for n, t in code.graph.nodes(data="node_type") if t == "qubit"]
 
     pos = {
-        q: (i % distance, -(i // distance))
+        q: (i % code.d, -(i // code.d))
         for q in qubits
         for i in [int(q[1:])]
     }
 
-    for check, t in graph.nodes(data="node_type"):
+    for check, t in code.graph.nodes(data="node_type"):
         if t not in {"x_check", "z_check"}:
             continue
 
-        ns = list(graph[check])
+        ns = list(code.graph[check])
         pos[check] = tuple(sum(pos[q][axis] for q in ns) / len(ns) for axis in (0, 1))
 
-    node_groups, edge_groups = _get_render_groups(graph, x_errors, z_errors, data, node_to_index)
+    node_groups, edge_groups = _get_render_groups(code)
 
     render_info = RenderInfo(
-        graph=graph,
-        x_errors=x_errors,
-        z_errors=z_errors,
-        data=data,
-        node_to_index=node_to_index,
+        graph=code.graph,
+        x_errors=code.x_errors,
+        z_errors=code.z_errors,
+        data=code.data,
+        node_to_index=code.node_to_index,
         pos=pos,
         figsize=(10, 8),
         edge_groups=edge_groups,
         node_groups=node_groups,
         labels=None,
         legend=True,
-        title="LDPC Code Tanner Graph",
-        save_path=None
+        title=title,
+        save_path=None,
+        return_fig=return_fig,
     )
 
-    _draw_graph(render_info)
+    return _draw_graph(render_info)
