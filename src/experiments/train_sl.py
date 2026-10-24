@@ -1,5 +1,4 @@
-from src.agents import NeuralBPEncoder, SLAgent
-from src.agents.encoders import CGNNEncoder
+from src.agents import SLAgent
 from src.environment import QECEnv
 from src.train_utils import create_dataset_from_curriculum, create_dataset_from_uniform_shots, create_dataset_from_pretrained_encoder_mistakes
 import torch
@@ -16,16 +15,16 @@ def train_sl(config):
     checkpoint_dir = f"sl_{encoder_type}{config.neural_bp_iterations}_{config.code_name}_{config.wandb_run_name}_{int(time.time())}"
     os.makedirs(f"checkpoints/{checkpoint_dir}", exist_ok=True)
 
-    print(f"Pretraining {encoder_type} encoder for code {config.code_name} for {config.num_pretrain_timesteps} steps with learning rate {config.encoder_learning_rate}.")
+    print(f"Pretraining {encoder_type} encoder for code {config.code_name} for {config.num_sl_steps} steps with learning rate {config.encoder_learning_rate}.")
 
-    shots = create_dataset_from_curriculum(config, config.num_pretrain_timesteps)
+    shots = create_dataset_from_curriculum(config, config.num_sl_steps)
 
     env = QECEnv(config, shots)
 
     model = SLAgent(config, env).to(config.device)
     opt = torch.optim.Adam(model.parameters(), lr=config.encoder_learning_rate)
 
-    for i in tqdm(range(config.num_pretrain_timesteps)):
+    for i in tqdm(range(config.num_sl_steps)):
         obs, _ = env.reset()
         error_true = env.code.x_errors.float() + env.code.z_errors.float()
         error_pred = model(obs)

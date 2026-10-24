@@ -9,7 +9,7 @@ class SLAgent(nn.Module):
         self.config = config
 
         use_nbp = nbp_checkpoint is not None or (cgnn_checkpoint is None and config.use_neural_bp)
-        out_dim = config.encoder_hidden_dim if use_nbp else config.hidden_layers_gnn[-1]
+        out_dim = config.encoder_hidden_dim if use_nbp else config.hidden_layers_cgnn[-1]
 
         self.encoder = NeuralBPEncoder(config, env) if use_nbp else CGNNEncoder(config, env)
         self.output_layer = nn.Linear(out_dim, 1)

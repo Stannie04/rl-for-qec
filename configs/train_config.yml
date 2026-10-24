@@ -1,7 +1,9 @@
-n_repetitions: 5
+n_repetitions: 1
 num_timesteps: 10000
-num_pretrain_timesteps: 100000
-max_episode_length: 5
+num_sl_steps: 100000
+max_episode_length: 10
+
+specialize_agent: False
 
 # Environment parameters
 noise_model: "depolarizing"
@@ -9,22 +11,42 @@ noise_model: "depolarizing"
 # Evaluation parameters
 evaluate_during_training: True
 steps_between_evaluation: 1000
+eval_episodes_per_weight: 1000
 steps_between_pretrain_evaluation: 5000
+post_training_evaluation_episodes: 10000000
+max_evaluation_error: 4
 
-post_training_evaluation_episodes: 500000
+
+evaluation_error_rates:
+  - 0.001
+  - 0.002
+  - 0.003
+  - 0.004
+  - 0.005
+
+
+# HPO parameters
+hpo_num_trials: 1000
+hpo_num_eval_samples: 100000
+hpo_error_rates:
+  - 0.003
+  - 0.025
+
 
 # Curriculum learning parameters
-curriculum_start_error_rate: 0.001
-curriculum_end_error_rate: 0.01
-curriculum_start_weight: 1
-curriculum_end_weight: 4
-curriculum_warmup_steps: 3000
+curriculum_start_error_rate_144: 0.001 # Normalized error rate for 144 qubits, changes to the equivalent error rate for other code distances
+curriculum_end_error_rate_144: 0.01
+curriculum_warmup_steps: 5000
 
 # Router (MoE) training parameters
 moe_num_timesteps: 10000
 moe_start_p: 0.15
 moe_end_p: 0.05
 moe_time_penalty_factor: 100
+
+
+router_sl_num_epochs: 10
+router_sl_batch_size: 128
 
 # Logging parameters for Weights & Biases
 wandb_logging: True

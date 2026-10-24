@@ -2,9 +2,25 @@ import time
 from tqdm import tqdm
 import os
 import torch
+from torch.utils.data import Dataset, random_split
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 from src.environment import QECEnv
-from src.agents import RouterAgent
-from src.train_utils import load_shots, get_agent_and_inference, parallel_inference
+from src.agents import RouterAgent, RouterNetwork
+from src.train_utils import load_shots, get_agent_and_inference, inference, create_dataset_from_moe_shots_labelled
+
+class GraphDataset(Dataset):
+    def __init__(self, dataset):
+        self.x = dataset["x"]
+        self.edge_index = dataset["edge_index"]
+        self.labels = dataset["labels"]
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        return Data(x=self.x[idx], edge_index=self.edge_index, y=self.labels[idx].unsqueeze(0))
+
 
 
 def rl_train_loop(config, env, agent, expert_list, inference_list, train=True):
@@ -77,6 +93,68 @@ def rl_train_loop(config, env, agent, expert_list, inference_list, train=True):
         print(f"Pattern: {pattern}, Hits: {total}, MOE Success Rate: {moe_success_rate:.4f}, Action distribution (BP chosen): {action_dist_rate:.4f}")
 
 
+def sl_evaluate(config, router, test, num_experts, epoch, train_loss):
+    router.eval()
+
+    num_test_samples = len(test.dataset)
+    correct = torch.zeros(num_experts, device=config.device)
+    tp = torch.zeros(num_experts, device=config.device)
+    fp = torch.zeros(num_experts, device=config.device)
+    fn = torch.zeros(num_experts, device=config.device)
+    test_loss = 0.0
+
+    with torch.no_grad():
+        for batch in tqdm(test, desc="SL Evaluation", leave=False):
+            batch = batch.to(config.device)
+            batch_labels = batch.y
+
+            logits = router(batch)
+            loss = torch.nn.BCEWithLogitsLoss()(logits, batch_labels)
+
+            predictions = logits >= 0
+            targets = batch_labels >= 0.5
+
+            test_loss += loss.item() * targets.size(0)
+            correct += (predictions == targets).sum(dim=0)
+            tp += ((predictions == 1) & (targets == 1)).sum(dim=0)
+            fp += ((predictions == 1) & (targets == 0)).sum(dim=0)
+            fn += ((predictions == 0) & (targets == 1)).sum(dim=0)
+
+    test_loss /= num_test_samples
+    test_accuracy = correct / num_test_samples
+    precision = tp / (tp + fp + 1e-8)
+    recall = tp / (tp + fn + 1e-8)
+
+    print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Test Loss: {test_loss:.4f} | Accuracy: {test_accuracy.mean().item():.4f} | Precision: {precision.mean().item():.4f} | Recall: {recall.mean().item():.4f}")
+    print(f"Per Expert Accuracy: {test_accuracy.cpu().numpy()}, Precision: {precision.cpu().numpy()}, Recall: {recall.cpu().numpy()}\n")
+
+
+def sl_train_loop(config, router, train, test):
+    num_experts = len(config.moe_experts)
+    criterion = torch.nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.Adam(router.parameters(), lr=config.router_sl_learning_rate)
+
+    for epoch in range(config.router_sl_num_epochs):
+        losses = []
+        router.train()
+        for batch in tqdm(train, desc=f"SL Training - Epoch {epoch}", leave=False):
+            batch = batch.to(config.device)
+            batch_labels = batch.y
+            optimizer.zero_grad()
+
+            logits = router(batch)
+            loss = criterion(logits, batch_labels)
+
+            loss.backward()
+            optimizer.step()
+
+            losses.append(loss.item())
+
+        train_loss = sum(losses) / len(losses)
+        sl_evaluate(config, router, test, num_experts, epoch, train_loss)
+
+    router.save(f"checkpoints/evaluate_cps/moe_{config.code_name}_router.pt")
+
 def get_decoders(config, env):
     expert_list, inference_list = [], []
     for decoder_name in config.moe_experts:
@@ -88,7 +166,7 @@ def get_decoders(config, env):
 
 
 def evaluate_moe(config):
-    shots = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name="bp")
+    shots = load_shots(config, dataset_type="mistakes", agent_name="bp")
     env = QECEnv(config, shots)
     agent = RouterAgent(config, env, router_checkpoint="checkpoints/evaluate_cps/router.pt")
     expert_list, inference_list = get_decoders(config, env)
@@ -104,6 +182,23 @@ def train_moe_rl(config):
     rl_train_loop(config, env, agent, expert_list, inference_list)
 
 
+def train_moe_sl(config):
+    shots = load_shots(config, dataset_type="moe_labelled")
+    dataset = GraphDataset(shots)
+
+    generator = torch.Generator().manual_seed(42)
+    n_test = int(len(dataset) * config.router_sl_test_fraction)
+    n_train = len(dataset) - n_test
+    train_set, test_set = random_split(dataset, [n_train, n_test], generator=generator)
+
+    train_loader = DataLoader(train_set, batch_size=config.router_sl_batch_size, shuffle=True)
+    test_loader = DataLoader(test_set, batch_size=config.router_sl_batch_size, shuffle=False)
+    env = QECEnv(config)
+
+    agent = RouterNetwork(config, env)
+    sl_train_loop(config, agent, train_loader, test_loader)
+
+
 def train_router(config):
-    train_moe_rl(config)
+    train_moe_sl(config)
     # evaluate_moe(config)

@@ -5,11 +5,7 @@ sac:
   gamma: 0.99
   tau: 0.005
 
-  # Used for the dueling MLPs + GRU in the neural BP decoder
-  neural_bp_iterations: 4
-  neural_bp_hidden_dim: 128
-
-  hidden_layers_gnn:
+  hidden_layers_cgnn:
     - 32
     - 128
     - 256
