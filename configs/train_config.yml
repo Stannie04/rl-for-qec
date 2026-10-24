@@ -24,6 +24,9 @@ evaluation_error_rates:
   - 0.004
   - 0.005
 
+agents_to_evaluate:
+  - bp
+
 
 # HPO parameters
 hpo_num_trials: 1000

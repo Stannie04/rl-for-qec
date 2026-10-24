@@ -37,8 +37,8 @@ class BPAgent(ClassicAgent):
     def __init__(self, env, config):
         super().__init__(env, config)
 
-        H_z = np.array(env.code.H.z.cpu(), dtype=np.int8)
         H_x = np.array(env.code.H.x.cpu(), dtype=np.int8)
+        H_z = np.array(env.code.H.z.cpu(), dtype=np.int8)
 
         if config.noise_model == "depolarizing":
             physical_error_rate = 2*env.curriculum_error_rate / 3
