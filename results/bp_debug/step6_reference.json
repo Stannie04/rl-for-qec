@@ -1,11 +1,12 @@
 {
   "codes": [
-    "d3_surface"
+    "d7_surface",
+    "d5_surface"
   ],
   "seed": 0,
-  "quick": true,
-  "n_per_weight": 10,
-  "shots_per_dataset": 10,
+  "quick": false,
+  "n_per_weight": 5000,
+  "shots_per_dataset": 5000,
   "iid_rates": [
     0.001,
     0.003,
@@ -19,98 +20,182 @@
   "bp_max_iter": 30,
   "bp_prior_convention": "2*curriculum_error_rate/3 (repo BPAgent, depolarizing)",
   "bp_prior": {
-    "d3_surface": 0.010666666666666666
+    "d7_surface": 0.001959183673469388,
+    "d5_surface": 0.00384
   },
   "iid": {
-    "d3_surface": {
+    "d7_surface": {
       "0.001": {
-        "n": 10,
-        "bp_failures": 0,
-        "bp_failure_fraction": 0.0,
-        "bp_non_converged": 0,
+        "n": 5000,
+        "bp_failures": 81,
+        "bp_failure_fraction": 0.0162,
+        "bp_non_converged": 81,
         "mwpm_failures": 0,
         "mwpm_failure_fraction": 0.0,
         "repo_mwpm_failures": 0,
         "repo_mwpm_failure_fraction": 0.0,
         "repo_vs_independent_disagreements": 0,
         "repo_vs_independent_disagreement_examples": [],
-        "seconds": 0.04
+        "seconds": 18.76
       },
       "0.003": {
-        "n": 10,
-        "bp_failures": 0,
-        "bp_failure_fraction": 0.0,
-        "bp_non_converged": 0,
+        "n": 5000,
+        "bp_failures": 242,
+        "bp_failure_fraction": 0.0484,
+        "bp_non_converged": 242,
         "mwpm_failures": 0,
         "mwpm_failure_fraction": 0.0,
         "repo_mwpm_failures": 0,
         "repo_mwpm_failure_fraction": 0.0,
         "repo_vs_independent_disagreements": 0,
         "repo_vs_independent_disagreement_examples": [],
-        "seconds": 0.03
+        "seconds": 14.78
       },
       "0.005": {
-        "n": 10,
-        "bp_failures": 0,
-        "bp_failure_fraction": 0.0,
-        "bp_non_converged": 0,
+        "n": 5000,
+        "bp_failures": 378,
+        "bp_failure_fraction": 0.0756,
+        "bp_non_converged": 378,
         "mwpm_failures": 0,
         "mwpm_failure_fraction": 0.0,
         "repo_mwpm_failures": 0,
         "repo_mwpm_failure_fraction": 0.0,
         "repo_vs_independent_disagreements": 0,
         "repo_vs_independent_disagreement_examples": [],
-        "seconds": 0.03
+        "seconds": 27.55
+      }
+    },
+    "d5_surface": {
+      "0.001": {
+        "n": 5000,
+        "bp_failures": 54,
+        "bp_failure_fraction": 0.0108,
+        "bp_non_converged": 54,
+        "mwpm_failures": 0,
+        "mwpm_failure_fraction": 0.0,
+        "repo_mwpm_failures": 0,
+        "repo_mwpm_failure_fraction": 0.0,
+        "repo_vs_independent_disagreements": 0,
+        "repo_vs_independent_disagreement_examples": [],
+        "seconds": 27.89
+      },
+      "0.003": {
+        "n": 5000,
+        "bp_failures": 182,
+        "bp_failure_fraction": 0.0364,
+        "bp_non_converged": 182,
+        "mwpm_failures": 0,
+        "mwpm_failure_fraction": 0.0,
+        "repo_mwpm_failures": 0,
+        "repo_mwpm_failure_fraction": 0.0,
+        "repo_vs_independent_disagreements": 0,
+        "repo_vs_independent_disagreement_examples": [],
+        "seconds": 18.32
+      },
+      "0.005": {
+        "n": 5000,
+        "bp_failures": 266,
+        "bp_failure_fraction": 0.0532,
+        "bp_non_converged": 266,
+        "mwpm_failures": 0,
+        "mwpm_failure_fraction": 0.0,
+        "repo_mwpm_failures": 0,
+        "repo_mwpm_failure_fraction": 0.0,
+        "repo_vs_independent_disagreements": 0,
+        "repo_vs_independent_disagreement_examples": [],
+        "seconds": 13.61
       }
     }
   },
   "uniform": {
-    "d3_surface": {
+    "d7_surface": {
       "1": {
-        "n": 10,
-        "bp_failures": 4,
-        "bp_failure_fraction": 0.4,
-        "bp_non_converged": 4,
+        "n": 5000,
+        "bp_failures": 2184,
+        "bp_failure_fraction": 0.4368,
+        "bp_non_converged": 2184,
         "mwpm_failures": 0,
         "mwpm_failure_fraction": 0.0,
         "repo_mwpm_failures": 0,
         "repo_mwpm_failure_fraction": 0.0,
         "repo_vs_independent_disagreements": 0,
         "repo_vs_independent_disagreement_examples": [],
-        "seconds": 0.04
+        "seconds": 21.48
       },
       "2": {
-        "n": 10,
-        "bp_failures": 10,
-        "bp_failure_fraction": 1.0,
-        "bp_non_converged": 8,
-        "mwpm_failures": 8,
-        "mwpm_failure_fraction": 0.8,
-        "repo_mwpm_failures": 8,
-        "repo_mwpm_failure_fraction": 0.8,
+        "n": 5000,
+        "bp_failures": 3724,
+        "bp_failure_fraction": 0.7448,
+        "bp_non_converged": 3724,
+        "mwpm_failures": 0,
+        "mwpm_failure_fraction": 0.0,
+        "repo_mwpm_failures": 0,
+        "repo_mwpm_failure_fraction": 0.0,
         "repo_vs_independent_disagreements": 0,
         "repo_vs_independent_disagreement_examples": [],
-        "seconds": 0.04
+        "seconds": 22.13
       },
       "3": {
-        "n": 10,
-        "bp_failures": 10,
-        "bp_failure_fraction": 1.0,
-        "bp_non_converged": 7,
-        "mwpm_failures": 9,
-        "mwpm_failure_fraction": 0.9,
-        "repo_mwpm_failures": 9,
-        "repo_mwpm_failure_fraction": 0.9,
+        "n": 5000,
+        "bp_failures": 4536,
+        "bp_failure_fraction": 0.9072,
+        "bp_non_converged": 4536,
+        "mwpm_failures": 0,
+        "mwpm_failure_fraction": 0.0,
+        "repo_mwpm_failures": 0,
+        "repo_mwpm_failure_fraction": 0.0,
         "repo_vs_independent_disagreements": 0,
         "repo_vs_independent_disagreement_examples": [],
-        "seconds": 0.04
+        "seconds": 43.75
+      }
+    },
+    "d5_surface": {
+      "1": {
+        "n": 5000,
+        "bp_failures": 2708,
+        "bp_failure_fraction": 0.5416,
+        "bp_non_converged": 2708,
+        "mwpm_failures": 0,
+        "mwpm_failure_fraction": 0.0,
+        "repo_mwpm_failures": 0,
+        "repo_mwpm_failure_fraction": 0.0,
+        "repo_vs_independent_disagreements": 0,
+        "repo_vs_independent_disagreement_examples": [],
+        "seconds": 28.13
+      },
+      "2": {
+        "n": 5000,
+        "bp_failures": 4349,
+        "bp_failure_fraction": 0.8698,
+        "bp_non_converged": 4349,
+        "mwpm_failures": 0,
+        "mwpm_failure_fraction": 0.0,
+        "repo_mwpm_failures": 0,
+        "repo_mwpm_failure_fraction": 0.0,
+        "repo_vs_independent_disagreements": 0,
+        "repo_vs_independent_disagreement_examples": [],
+        "seconds": 40.67
+      },
+      "3": {
+        "n": 5000,
+        "bp_failures": 4797,
+        "bp_failure_fraction": 0.9594,
+        "bp_non_converged": 4670,
+        "mwpm_failures": 1124,
+        "mwpm_failure_fraction": 0.2248,
+        "repo_mwpm_failures": 1124,
+        "repo_mwpm_failure_fraction": 0.2248,
+        "repo_vs_independent_disagreements": 0,
+        "repo_vs_independent_disagreement_examples": [],
+        "seconds": 50.01
       }
     }
   },
   "observations": [
-    "Repo `has_logical_error` evaluation and the independent logical check disagree on 0 of 60 MWPM predictions over all 6 datasets.",
-    "On the uniform weight-1..3 shots MWPM fails 17 times and plain BP fails 24 times (30 shots in total).",
-    "Weight-1 shots (one X and one Z flip at independent positions, 10 shots per code): MWPM fails 0 times, BP fails 4 times.",
-    "[d3_surface] iid p=0.001 (n=10): MWPM fails 0, BP fails 0 (non-converged BP shots: 0)."
+    "Repo `has_logical_error` evaluation and the independent logical check disagree on 0 of 60000 MWPM predictions over all 12 datasets.",
+    "On the uniform weight-1..3 shots MWPM fails 1124 times and plain BP fails 22298 times (30000 shots in total).",
+    "Weight-1 shots (one X and one Z flip at independent positions, 5000 shots per code): MWPM fails 0 times, BP fails 4892 times.",
+    "[d7_surface] iid p=0.001 (n=5000): MWPM fails 0, BP fails 81 (non-converged BP shots: 81).",
+    "[d5_surface] iid p=0.001 (n=5000): MWPM fails 0, BP fails 54 (non-converged BP shots: 54)."
   ]
 }
