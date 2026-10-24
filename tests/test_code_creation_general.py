@@ -218,9 +218,10 @@ def _config(code_type: str):
             l=2,
             m=1,
             code_params={},
+            noise_model="depolarizing",
         )
     if code_type == "surface":
-        return SimpleNamespace(code_type="surface", device="cpu", d=3, code_params={})
+        return SimpleNamespace(code_type="surface", device="cpu", d=3, code_params={}, noise_model="depolarizing")
     if code_type == "tile":
         n_data = 8  # test-double convention: 2*L*L with L=2
         return SimpleNamespace(
@@ -231,6 +232,7 @@ def _config(code_type: str):
             d=3,
             L=2,
             code_params={},
+            noise_model="depolarizing",
         )
     raise ValueError(f"Unknown test code type: {code_type}")
 
@@ -243,7 +245,6 @@ def test_constructor_initializes_supported_code_types(code_type, use_determinist
     assert code.code_type == code_type
     assert code.device == "cpu"
     assert code.n_data == code.H.x.shape[1] == code.H.z.shape[1]
-    assert code.no_op_index == code.n_data
     assert code.feature_dim == 6
 
     # All graph nodes and edge indices should agree with the matrices.

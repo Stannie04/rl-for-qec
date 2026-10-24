@@ -9,6 +9,8 @@ if not torch.cuda.is_available():
     print("WARNING: CUDA is not available. Using CPU for training.")
     print("="*80, "\n")
 
+torch.set_float32_matmul_precision("high")
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Train RL agents for quantum error correction.")
     parser.add_argument("-a", "--agent", type=str, default="sac", help="Agent type (e.g., dqn, sac)")
@@ -28,6 +30,7 @@ def select_experiment(experiment_name):
         case "benchmark": return benchmark_env
         case "hpo": return optimize_hyperparameters
         case "render": return render_example_environment
+        case "mistakes" : return render_mistakes
         case "evaluate": return post_train_evaluation
         case "analysis": return full_analysis
         case "dataset": return create_all_datasets

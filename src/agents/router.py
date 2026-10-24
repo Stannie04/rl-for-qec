@@ -5,19 +5,19 @@ from .encoders import NeuralBPEncoder, CGNNEncoder
 from .common import graph_mean_pool
 
 
-class Router(nn.Module):
-    def __init__(self, config, env):
+class RouterNetwork(nn.Module):
+    def __init__(self, config, env, checkpoint=None):
         super().__init__()
 
         self.env = env
         self.device = env.device
 
         if config.use_neural_bp:
-            self.encoder = NeuralBPEncoder(config, env)
-            prev_dim = config.encoder_hidden_dim
+            self.encoder = NeuralBPEncoder(config, env).to(self.device)
+            prev_dim = config.neural_bp_hidden_dim
         else:
-            self.encoder = CGNNEncoder(config.moe_hidden_layers_gnn, env.code.feature_dim)
-            prev_dim = config.moe_hidden_layers_gnn[-1]
+            self.encoder = CGNNEncoder(config.moe_hidden_layers_cgnn, env.code.feature_dim).to(self.device)
+            prev_dim = config.moe_hidden_layers_cgnn[-1]
 
         classification_layers = []
         for hidden_dim in config.moe_hidden_layers_mlp:
@@ -29,18 +29,35 @@ class Router(nn.Module):
 
         self = self.to(self.device)
 
+        if checkpoint:
+            self.load(checkpoint)
+
 
     def forward(self, x):
         h = self.encoder(x)
-        graph_feat = graph_mean_pool(h, x, torch.zeros(h.size(0)))
+
+        batch = getattr(x, "batch", None)
+
+        if batch is None:
+            batch = torch.zeros(h.size(0), dtype=torch.long, device=h.device)
+        else:
+            batch = batch.to(h.device)
+
+        graph_feat = graph_mean_pool(h, x, batch)
         return self.action_head(graph_feat)
+
+    def load(self, checkpoint):
+        self.load_state_dict(torch.load(checkpoint, map_location=self.device))
+
+    def save(self, path):
+        torch.save(self.state_dict(), path)
 
 
 class RouterAgent:
     def __init__(self, config, env, router_checkpoint=None, encoder_checkpoint=None):
         self.env = env
         self.device = env.device
-        self.router = Router(config, env).to(self.device)
+        self.router = RouterNetwork(config, env).to(self.device)
         self.optimizer = torch.optim.Adam(self.router.parameters(), lr=config.moe_learning_rate)
 
         self.baseline = 0.0
@@ -85,4 +102,5 @@ class RouterAgent:
 
     def load_encoder(self, checkpoint):
         full_cp = torch.load(checkpoint, map_location=self.device)
+        breakpoint()
         self.router.encoder.load_state_dict(full_cp["encoder"])

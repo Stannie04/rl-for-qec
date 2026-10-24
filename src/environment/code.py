@@ -13,6 +13,7 @@ class QECCode(gym.Env):
         super(QECCode, self).__init__()
         self.device = config.device
         self.code_type = config.code_type
+        self.noise_model = config.noise_model
 
         if config.code_type == "toric" or config.code_type == "ldpc":
             self.n, self.k, self.d = config.n, config.k, config.d
@@ -39,6 +40,8 @@ class QECCode(gym.Env):
         self.x_idx = torch.tensor([self.node_to_index[f"x{i}"] for i in range(self.H.x.shape[0])], dtype=torch.long, device=self.device)
         self.z_idx = torch.tensor([self.node_to_index[f"z{i}"] for i in range(self.H.z.shape[0])], dtype=torch.long, device=self.device)
 
+        self.num_x_checks, self.num_z_checks = self.H.x.shape[0], self.H.z.shape[0]
+
         self.x_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
         self.z_errors = torch.zeros(self.n_data, dtype=torch.long, device=self.device)
         # X and Z checks may differ in number, so size each syndrome by its own matrix:
@@ -59,26 +62,24 @@ class QECCode(gym.Env):
 
 
     def has_logical_error(self) -> bool:
+        syndromes_clear = (torch.all(self.x_syndrome == 0) and torch.all(self.z_syndrome == 0))
+
+        if not bool(syndromes_clear):
+            return False
 
         logical_x_state, logical_z_state = self.get_logical_state()
 
-        x_syndrome_clear = torch.all(self.x_syndrome == 0)
-        z_syndrome_clear = torch.all(self.z_syndrome == 0)
-        x_is_logical = torch.any(logical_x_state != 0)
-        z_is_logical = torch.any(logical_z_state != 0)
+        x_is_logical = bool(torch.any(logical_x_state != 0))
+        z_is_logical = bool(torch.any(logical_z_state != 0))
 
-        # Combine the checks before converting to a Python bool.
-        return bool((x_syndrome_clear & x_is_logical)| (z_syndrome_clear & z_is_logical))
+        return x_is_logical or z_is_logical
 
 
     def is_error_free(self) -> bool:
         return self.num_x_errors == 0 and self.num_z_errors == 0
 
-
-    def reset_syndrome(self) -> None:
-
-        self.x_syndrome = ((self.H.x_float @ self.z_errors.float()) % 2).long()
-        self.z_syndrome = ((self.H.z_float @ self.x_errors.float()) % 2).long()
+    def is_syndrome_free(self) -> bool:
+        return torch.all(self.x_syndrome == 0) and torch.all(self.z_syndrome == 0)
 
 
     def update_graph(self, llr) -> None:
@@ -90,33 +91,28 @@ class QECCode(gym.Env):
         self.data.x[self.z_idx, 4] = self.z_syndrome.float()
 
 
-    def flip(self, qubit_index, error_type=1) -> None:
-        # error_type = 1: X error
-        # error_type = 2: Z error
-        # error_type = 3: Y error
-        if error_type != 2:
-            self.num_x_errors += 1 - 2 * self.x_errors[qubit_index]
-            self.x_errors[qubit_index] ^= 1
-            self.z_syndrome[self.qubit_to_z[qubit_index]] ^= 1
-
-        if error_type != 1:
-            self.num_z_errors += 1 - 2 * self.z_errors[qubit_index]
-            self.z_errors[qubit_index] ^= 1
-            self.x_syndrome[self.qubit_to_x[qubit_index]] ^= 1
+    def flip(self, action_index) -> None:
+        if action_index < self.n_data:
+            # Flip X error
+            self.x_errors[action_index] ^= 1
+            self.num_x_errors += 1 if self.x_errors[action_index] == 1 else -1
+            self.z_syndrome ^= self.H.z[:, action_index]
+        else:
+            # Flip Z error
+            z_index = action_index - self.n_data
+            self.z_errors[z_index] ^= 1
+            self.num_z_errors += 1 if self.z_errors[z_index] == 1 else -1
+            self.x_syndrome ^= self.H.x[:, z_index]
 
 
     def flip_randomly(self, error_rate) -> None:
-        action_mask = torch.rand(self.n_data, device=self.device) < error_rate
+        num_actions, flip_rate = (self.n_data*2, error_rate/2) if self.noise_model == "depolarizing" else (self.n_data, error_rate)
+
+        action_mask = torch.rand(num_actions, device=self.device) < flip_rate # *2 for both X and Z errors
         actions = torch.where(action_mask)[0]
 
         for action in actions.tolist():
             self.flip(action)
-
-
-    def flip_set_number_of_qubits(self, num_flips) -> None:
-        indices = torch.randperm(self.n_data, device=self.device)[:num_flips]
-        for index in indices.tolist():
-            self.flip(index)
 
 
     def set_error_pattern(self, error_pattern_x, error_pattern_z) -> None:
@@ -127,7 +123,8 @@ class QECCode(gym.Env):
         self.z_errors = torch.tensor(error_pattern_z, dtype=torch.long, device=self.device)
         self.num_x_errors = error_pattern_x.sum()
         self.num_z_errors = error_pattern_z.sum()
-        self.reset_syndrome()
+        self.x_syndrome = ((self.H.x_float @ self.z_errors.float()) % 2).long()
+        self.z_syndrome = ((self.H.z_float @ self.x_errors.float()) % 2).long()
 
 
     def clear_errors(self) -> None:
@@ -151,15 +148,13 @@ class QECCode(gym.Env):
         return (num_x_overlaps_one, num_x_overlaps_two)
 
 
-
-    def render(self, mode="normal"):
-        breakpoint()
+    def render(self, mode="normal", title=None, return_fig=False):
         if mode=="subgraph":
-            render_subgraph(self.graph, self.data, self.node_to_index, x_errors=self.x_errors, z_errors=self.z_errors)
+            return render_subgraph(self, title=title, return_fig=return_fig)
         else:
             match self.code_type:
-                case "toric" | "ldpc"| "tile": render_spring(self.graph.subgraph(self.x_subgraph_nodes), self.x_errors, self.z_errors, self.data, self.node_to_index)
-                case "surface": render_surface(self.graph, self.x_errors, self.z_errors, self.data, self.node_to_index, self.d)
+                case "toric" | "ldpc"| "tile": return render_spring(self, title=None, return_fig=return_fig)
+                case "surface": return render_surface(self, title=None, return_fig=return_fig)
                 case _: raise ValueError(f"Unknown code type: {self.code_type}")
     #
     # Private helper functions for initializing the code structure, calculating logical operators, and rendering the graph.
@@ -174,7 +169,6 @@ class QECCode(gym.Env):
             qubit_to_z[q] = torch.where(self.H.z[:, q] == 1)[0]
 
         return qubit_to_x, qubit_to_z
-
 
     def _init_graph(self):
 

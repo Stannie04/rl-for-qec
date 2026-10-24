@@ -57,6 +57,7 @@ def _build_code(code_name: str) -> QECCode:
     if code_name not in all_configs:
         pytest.skip(f"{code_name} is not defined in {CONFIG_PATH}")
     config_fields = all_configs[code_name]
+    config_fields["noise_model"] = "depolarizing"
     config = SimpleNamespace(device=torch.device("cpu"), **config_fields)
     return QECCode(config)
 

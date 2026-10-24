@@ -1,16 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, GraphConv, GATConv
-
-from .common import scatter_add
-
+from torch_geometric.nn import GraphConv
 
 class CGNNEncoder(nn.Module):
     def __init__(self, config, env):
         super().__init__()
 
-        hidden_dims = config.hidden_layers_gnn
+        hidden_dims = config.hidden_layers_cgnn
         feature_dim = env.code.feature_dim
 
         assert len(hidden_dims) > 0, "hidden_dims must contain at least one layer size."
@@ -43,89 +40,116 @@ class CGNNEncoder(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, in_dim, hidden_dims):
+    def __init__(self, hidden_dim, hidden_dims, extra_dim=0):
         super().__init__()
+        h1 = hidden_dims[0]
+        self.src = nn.Linear(hidden_dim, h1, bias=False)
+        self.dst = nn.Linear(hidden_dim, h1, bias=True)
+        self.extra = nn.Linear(extra_dim, h1, bias=False) if extra_dim else None
+        self.rest = nn.ModuleList(
+            nn.Linear(hidden_dims[i - 1], hidden_dims[i]) for i in range(1, len(hidden_dims))
+        )
 
-        layers = []
-        prev = in_dim
-        for h in hidden_dims:
-            layers.append(nn.Linear(prev, h))
-            layers.append(nn.ReLU())
-            prev = h
+    def node_terms(self, h_src, h_dst, extra_term=None):
+        ps = self.src(h_src)
+        if extra_term is not None:
+            ps = ps + extra_term
+        return ps, self.dst(h_dst)
 
-        self.mlp = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.mlp(x)
+    def edge_forward(self, ps_e, pd_e):
+        z = ps_e + pd_e
+        for lin in self.rest:          # ReLU between layers, none after the last
+            z = lin(F.relu(z))         # (match this to your MLP class)
+        return z
 
 
 class NeuralBPEncoder(nn.Module):
     def __init__(self, config, env):
-        """NOTE: we require hidden_dim to be the same for all layers, due to the GRUCell updates.
-        Otherwise, we need to enforce hidden_dims[0] == hidden_dims[-1] for the GRUCell updates to work correctly.
-        """
-
         super().__init__()
+        H = config.neural_bp_hidden_dim
+        mlp_hidden_dims = list(config.hidden_layers_mlp) + [H]
+        self.H = H
+        self.num_iters = config.neural_bp_iterations
 
-        hidden_dim = config.neural_bp_hidden_dim
-        mlp_dims = config.hidden_layers_gnn
-        feature_dim = env.code.feature_dim
-        num_iters = config.neural_bp_iterations
-
-        mlp_hidden_dims = mlp_dims+[hidden_dim]
-
-        self.input_proj = nn.Linear(feature_dim, hidden_dim)
-
-        self.q_to_c_mlp = MLP(3*hidden_dim, mlp_hidden_dims)
-        self.c_to_q_mlp = MLP(3*hidden_dim+2, mlp_hidden_dims)
-        self.qubit_gru = nn.GRUCell(hidden_dim, hidden_dim)
-        self.check_gru = nn.GRUCell(hidden_dim, hidden_dim)
-
-        self.qubit_norm = nn.LayerNorm(hidden_dim)
-        self.check_norm = nn.LayerNorm(hidden_dim)
-
-        self.num_iters = num_iters
-
+        self.input_proj = nn.Linear(env.code.feature_dim, H)
+        self.q_to_c = MLP(H, mlp_hidden_dims)
+        self.c_to_q = MLP(H, mlp_hidden_dims, extra_dim=2)
+        self.qubit_gru = nn.GRUCell(H, H)
+        self.check_gru = nn.GRUCell(H, H)
+        self.qubit_norm = nn.LayerNorm(H)
+        self.check_norm = nn.LayerNorm(H)
         self.name = "nbp"
+        self._ready = False
+
+        self.set_graph(env.code.data.x, env.code.data.edge_index)  # Precompute graph topology
+        self.to(config.device)  # Move the model to the specified device
+        self.forward = torch.compile(self.forward, mode="reduce-overhead")  # Compile the forward method for performance
+
+    @torch.no_grad()
+    def set_graph(self, x0, edge_index):
+        N, dev = x0.size(0), x0.device
+        qmask = x0[:, 0] > 0.5
+        q_idx = qmask.nonzero().squeeze(-1)
+        c_idx = (~qmask).nonzero().squeeze(-1)
+        Nq, Nc = q_idx.numel(), c_idx.numel()
+
+        loc = torch.empty(N, dtype=torch.long, device=dev)   # global -> local index
+        loc[q_idx] = torch.arange(Nq, device=dev)
+        loc[c_idx] = torch.arange(Nc, device=dev)
+
+        src, dst = edge_index.to(dev)
+
+        def build(src_is_qubit, n_dst):
+            sel = qmask[src] == src_is_qubit
+            s, d = loc[src[sel]], loc[dst[sel]]
+            order = torch.argsort(d, stable=True)             # sort by destination
+            s, d = s[order], d[order]
+            deg = torch.bincount(d, minlength=n_dst)
+            uniform = int(deg[0]) if bool((deg == deg[0]).all()) else 0
+            return s, d, uniform
+
+        qc_s, qc_d, self.qc_deg = build(True, Nc)
+        cq_s, cq_d, self.cq_deg = build(False, Nq)
+
+        for name, t in dict(N=None, q_idx=q_idx, c_idx=c_idx, qc_s=qc_s, qc_d=qc_d,
+                            cq_s=cq_s, cq_d=cq_d).items():
+            if t is not None:
+                self.register_buffer(name, t, persistent=False)
+        self.N, self.Nq, self.Nc = N, Nq, Nc
+        self._ready = True
+
+    @staticmethod
+    def _aggregate(msg, dst, n_dst, uniform_deg):
+        B, E, H = msg.shape
+        if uniform_deg:   # edges sorted by dst, same degree everywhere: no scatter
+            return msg.reshape(B, n_dst, uniform_deg, H).sum(2)
+        return msg.new_zeros(B, n_dst, H).index_add_(1, dst, msg)
 
     def forward(self, data):
-        x = F.relu(self.input_proj(data.x))
-        syndrome = data.x[:, 3:5] # Raw syndrome info for action masking
+        x = data.x
+        flat = x.dim() == 2
+        if flat:                                  # PyG-style [B*N, F] -> [B, N, F]
+            x = x.view(-1, self.N, x.size(-1))
+        B, H, Nq, Nc = x.size(0), self.H, self.Nq, self.Nc
 
-
-        qubit_mask = data.x[:,0] > 0.5
-        check_mask = ~qubit_mask
-
-        q_idx = qubit_mask.nonzero(as_tuple=False).squeeze(-1)
-        c_idx = check_mask.nonzero(as_tuple=False).squeeze(-1)
-
-        src, dst = data.edge_index  # Edges go between qubits and checks
-        q_src = src[qubit_mask[src]]
-        q_dst = dst[qubit_mask[src]]
-        c_src = src[check_mask[src]]
-        c_dst = dst[check_mask[src]]
+        h = F.relu(self.input_proj(x))
+        hq, hc = h[:, self.q_idx], h[:, self.c_idx]
+        syn_term = self.c_to_q.extra(x[:, self.c_idx, 3:5])   # constant over iterations
 
         for _ in range(self.num_iters):
-            x_prev = x
-            q_in = torch.cat([x_prev[q_src], x_prev[q_dst], x_prev[q_src]-x_prev[q_dst]], dim=-1)
-            q_msg = self.q_to_c_mlp(q_in)
-            check_aggregate = scatter_add(q_msg, q_dst, x_prev.size(0))
+            # qubits -> checks
+            ps, pd = self.q_to_c.node_terms(hq, hc)
+            msg = self.q_to_c.edge_forward(ps[:, self.qc_s], pd[:, self.qc_d])
+            agg = self._aggregate(msg, self.qc_d, Nc, self.qc_deg)
+            c_new = self.check_gru(agg.reshape(-1, H), hc.reshape(-1, H)).view(B, Nc, H)
+            hc = self.check_norm(c_new)
 
-            c_old = x_prev[c_idx]
-            c_new = self.check_gru(check_aggregate[c_idx], c_old)
-            c_new = self.check_norm(c_old + c_new)
+            # checks -> qubits (uses updated checks, as in your original)
+            ps, pd = self.c_to_q.node_terms(hc, hq, syn_term)
+            msg = self.c_to_q.edge_forward(ps[:, self.cq_s], pd[:, self.cq_d])
+            agg = self._aggregate(msg, self.cq_d, Nq, self.cq_deg)
+            q_new = self.qubit_gru(agg.reshape(-1, H), hq.reshape(-1, H)).view(B, Nq, H)
+            hq = self.qubit_norm(q_new)
 
-            x = x_prev.clone()
-            x[c_idx] = c_new
-
-            c_in = torch.cat([x[c_src], x[c_dst], x[c_src]-x[c_dst], syndrome[c_src]], dim=-1)
-            c_msg = self.c_to_q_mlp(c_in)
-            qubit_aggregate = scatter_add(c_msg, c_dst, x.size(0))
-
-            q_old = x[q_idx]
-            q_new = self.qubit_gru(qubit_aggregate[q_idx], q_old)
-            q_new = self.qubit_norm(q_old + q_new)
-
-            x[q_idx] = q_new
-
-        return x
+        out = h.index_copy(1, self.q_idx, hq).index_copy(1, self.c_idx, hc)
+        return out.reshape(-1, H) if flat else out

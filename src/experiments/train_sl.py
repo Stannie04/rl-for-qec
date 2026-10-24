@@ -27,8 +27,7 @@ def train_sl(config):
 
     for i in tqdm(range(config.num_pretrain_timesteps)):
         obs, _ = env.reset()
-        error_true = env.code.x_errors.float()
-
+        error_true = env.code.x_errors.float() + env.code.z_errors.float()
         error_pred = model(obs)
         loss = F.binary_cross_entropy(error_pred, error_true)
         opt.zero_grad()

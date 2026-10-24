@@ -9,14 +9,27 @@ from src.agents import SACAgent, NeuralBPEncoder, SLAgent
 from src.train_utils import evaluate_agent, CurriculumScheduler, load_shots, create_dataset_from_nonzero_shots, create_dataset_from_curriculum, create_dataset_from_pretrained_encoder_mistakes
 import torch
 
-def get_reset_logs(episode_reward, info, start_errors):
+def get_reset_logs(episode_reward, info, start_x_errors, start_z_errors):
+
+    def _decoding_percentage(start, end):
+        if start == 0:
+            return 1.0 if end == 0 else -float(end)
+        return (start - end) / start
+
     return {
         "Train/Episode Reward": episode_reward,
         "Train/Episode Steps": info["episode_steps"],
-        "Decoding Ability/Errors at End of Episode": info["num_errors"],
-        "Decoding Ability/Errors at Start of Episode": start_errors,
-        "Decoding Ability/Errors decoded" : start_errors - info["num_errors"],
-        "Decoding Ability/Percentage of Errors Decoded": (start_errors - info["num_errors"]) / max(1, start_errors),
+        "Decoding Ability/Total Errors at Start of Episode": start_x_errors + start_z_errors,
+        "Decoding Ability/Total Errors at End of Episode": info["num_x_errors"] + info["num_z_errors"],
+        "Decoding Ability/X Errors at End of Episode": info["num_x_errors"],
+        "Decoding Ability/Z Errors at End of Episode": info["num_z_errors"],
+        "Decoding Ability/X Errors at Start of Episode": start_x_errors,
+        "Decoding Ability/Z Errors at Start of Episode": start_z_errors,
+        "Decoding Ability/X Errors decoded" : start_x_errors - info["num_x_errors"],
+        "Decoding Ability/Z Errors decoded" : start_z_errors - info["num_z_errors"],
+        "Decoding Ability/Percentage of X Errors Decoded": _decoding_percentage(start_x_errors, info["num_x_errors"]),
+        "Decoding Ability/Percentage of Z Errors Decoded": _decoding_percentage(start_z_errors, info["num_z_errors"]),
+        "Decoding Ability/Percentage of Total Errors Decoded": _decoding_percentage(start_x_errors + start_z_errors, info["num_x_errors"] + info["num_z_errors"])
     }
 
 
@@ -38,7 +51,8 @@ def single_agent_training_loop(env, agent, config, checkpoint_dir=None):
     curriculum = CurriculumScheduler(config)
     episode_reward = 0
     obs, info = env.reset()
-    start_errors = info["num_errors"]
+    start_x_errors = info["num_x_errors"]
+    start_z_errors = info["num_z_errors"]
     best_model_ler = float("inf")
 
     for step, _ in enumerate(tqdm(env.shots)):
@@ -56,11 +70,12 @@ def single_agent_training_loop(env, agent, config, checkpoint_dir=None):
         episode_reward += reward
 
         if truncated or terminated:
-            done_logs = get_reset_logs(episode_reward, info, start_errors)
+            done_logs = get_reset_logs(episode_reward, info, start_x_errors, start_z_errors)
 
             episode_reward = 0
             obs, info = env.reset()
-            start_errors = info["num_errors"]
+            start_x_errors = info["num_x_errors"]
+            start_z_errors = info["num_z_errors"]
 
         if config.evaluate_during_training and step % config.steps_between_evaluation == 0:
             ler, best_model_ler = evaluate_agent(config, step, best_model_ler, agent, checkpoint_dir)
@@ -79,8 +94,7 @@ def train_rl(config):
     if config.wandb_logging:
         wandb.init(project=config.wandb_project, name=f"{config.wandb_run_name}_{int(start_time)}", tags=[f"{config.agent_name}", f"{config.code_name}"], config=config.__dict__, dir="/tmp/wandb")
 
-    encoder = "nbp" if config.use_neural_bp else "cgnn"
-    checkpoint_dir = f"checkpoints/{config.agent_name}_{encoder}_{config.code_name}_{config.wandb_run_name}_{int(start_time)}"
+    checkpoint_dir = f"checkpoints/{config.wandb_run_name}_{int(start_time)}"
     os.mkdir(checkpoint_dir)
 
     try:
@@ -100,6 +114,8 @@ def train_rl(config):
         else:
             agent.save(f"{checkpoint_dir}/interrupted.pt")
 
+        raise
+
+    finally:
         if config.wandb_logging:
             wandb.finish()
-        raise

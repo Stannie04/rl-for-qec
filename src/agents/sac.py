@@ -26,10 +26,9 @@ class PrioritizedReplayBuffer:
         if len(self.buffer) < self.capacity:
             self.buffer.append(None)
 
-        for a in action:
-            self.buffer[self.pos] = (state, action, reward, next_state, done)
-            self.priorities[self.pos] = max_priority
-            self.pos = (self.pos + 1) % self.capacity
+        self.buffer[self.pos] = (state, action, reward, next_state, done)
+        self.priorities[self.pos] = max_priority
+        self.pos = (self.pos + 1) % self.capacity
 
     def sample(self, batch_size):
         probs = self.priorities[:len(self.buffer)] ** self.alpha
@@ -78,8 +77,6 @@ class SACAgent:
         self.qubit_to_x = self.env.code.qubit_to_x
         self.qubit_to_z = self.env.code.qubit_to_z
 
-        self.discrete = config.discrete
-
         self.actor = GNNActor(config, env).to(self.device)
         self.critic1 = GNNCritic(config, env).to(self.device)
         self.critic2 = GNNCritic(config, env).to(self.device)
@@ -102,7 +99,8 @@ class SACAgent:
         self.log_alpha = torch.tensor(math.log(config.initial_alpha), requires_grad=True, device=self.device)
         self.alpha_opt = torch.optim.Adam([self.log_alpha], lr=config.alpha_learning_rate)
 
-        self.target_entropy = -math.log(1.0 / env.code.n_data + 1) * 0.98
+        num_actions = env.code.n_data*2 if config.noise_model == "depolarizing" else env.code.n_data
+        self.target_entropy = math.log(num_actions) * config.entropy_factor
 
         self.gamma = config.gamma
         self.tau = config.tau
@@ -115,21 +113,19 @@ class SACAgent:
 
     def select_action(self, state, evaluate=False):
 
-        if self.discrete:
-            with torch.no_grad():
-                logits, log_probs, probs = self.actor(state.to(self.device))
+        with torch.no_grad():
+            logits, log_probs, probs = self.actor(state.to(self.device))
 
-                if evaluate:
-                    action = probs.argmax(dim=-1)
-                else:
-                    action = Categorical(probs).sample()
-            return action, probs
-
-        else:
-             return self.actor(state)[0].detach(), None
-
+            if evaluate:
+                action = probs.argmax(dim=-1)
+            else:
+                action = Categorical(probs).sample()
+        return action, probs
 
     def train_step(self):
+        if self.device.type == "cuda":
+            torch.compiler.cudagraph_mark_step_begin()
+
         if len(self.replay_buffer) < self.batch_size:
             return {}  # Not enough data to train
 
@@ -149,7 +145,7 @@ class SACAgent:
             min_q = torch.min(q1_next, q2_next)
             next_v = (probs * (min_q - self.alpha * log_probs)).sum(dim=1, keepdim=True)
             q_target = reward_batch + self.gamma * (1 - done_batch) * next_v
-            q_target = torch.clamp(q_target, -10.0, 10.0)
+            # q_target = torch.clamp(q_target, -10.0, 10.0)
 
         q1 = self.critic1(state_batch, action_batch)
         q2 = self.critic2(state_batch, action_batch)
@@ -160,8 +156,19 @@ class SACAgent:
             td_errors = ((td_error1 + td_error2) / 2).cpu().numpy()
             self.replay_buffer.update_priorities(indices, td_errors)
 
-        q1_loss = F.mse_loss(q1, q_target)
-        q2_loss = F.mse_loss(q2, q_target)
+        # q1_loss = F.mse_loss(q1, q_target)
+        # q2_loss = F.mse_loss(q2, q_target)
+        q1_per_sample = F.mse_loss(q1, q_target, reduction="none")
+        q2_per_sample = F.mse_loss(q2, q_target, reduction="none")
+
+        if weights is not None:
+            weights = weights.to(self.device).view(-1, 1)
+            q1_loss = (weights * q1_per_sample).mean()
+            q2_loss = (weights * q2_per_sample).mean()
+        else:
+            q1_loss = q1_per_sample.mean()
+            q2_loss = q2_per_sample.mean()
+
         critic_loss = q1_loss + q2_loss
 
         self.critic1_opt.zero_grad()
@@ -189,7 +196,7 @@ class SACAgent:
         self.actor_opt.step()
 
         entropy = -(probs * log_probs).sum(dim=1).detach()
-        alpha_loss = -(self.log_alpha * (entropy - self.target_entropy).detach()).mean()
+        alpha_loss = (self.log_alpha * (entropy - self.target_entropy).detach()).mean()
 
         self.alpha_opt.zero_grad()
         alpha_loss.backward()
@@ -208,6 +215,8 @@ class SACAgent:
             "Loss/Critic Loss": critic_loss.item(),
             "Loss/Alpha Loss": alpha_loss.item(),
             "Monitoring/Alpha": self.alpha,
+            "Monitoring/Mean Max Probability": probs.max(dim=-1).values.mean().item(),
+            "Monitoring/Entropy": entropy.mean().item(),
         }
 
         return train_logs

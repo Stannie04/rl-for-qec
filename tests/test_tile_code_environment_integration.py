@@ -26,6 +26,8 @@ def tile_config():
     """Minimal stand-in for ConfigParser holding the YAML fields of the tile code."""
     with open(CONFIG_PATH) as f:
         fields = yaml.safe_load(f)[CODE_NAME]
+
+    fields["noise_model"] = "depolarizing"
     return types.SimpleNamespace(device=torch.device("cpu"), **fields)
 
 
@@ -62,7 +64,7 @@ def test_logical_operators_have_k_rows(code):
 def test_single_qubit_flip_matches_check_matrix_column(code, qubit):
     # X error on a single qubit excites exactly the Z checks touching it.
     code.clear_errors()
-    code.flip(qubit, error_type=1)
+    code.flip(qubit)
     expected_z = code.H.z[:, qubit]
     assert torch.equal(code.z_syndrome, expected_z)
     assert int(code.z_syndrome.sum()) == int(expected_z.sum()) > 0
@@ -70,7 +72,7 @@ def test_single_qubit_flip_matches_check_matrix_column(code, qubit):
 
     # Z error on a single qubit excites exactly the X checks touching it.
     code.clear_errors()
-    code.flip(qubit, error_type=2)
+    code.flip(qubit + code.n_data)  # Z error is offset by n_data
     assert torch.equal(code.x_syndrome, code.H.x[:, qubit])
     assert int(code.x_syndrome.sum()) > 0
     assert int(code.z_syndrome.sum()) == 0

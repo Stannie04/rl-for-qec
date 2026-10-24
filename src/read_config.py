@@ -18,6 +18,9 @@ class ConfigParser:
             moe_config = all_model_configs["moe"]
             encoder_config = all_model_configs["encoder"]
 
+        with open(f"{config_dir}/plot_config.yml", "r") as f:
+            self.plot_config = yaml.safe_load(f)
+
         # Get all the parameters in the config files, and make them attributes of this class
         for c in [train_config, code_config, model_config, moe_config, encoder_config]:
             for key, value in c.items():
@@ -30,7 +33,7 @@ class ConfigParser:
         self.agent_name = agent_name
         self.code_name = code_name
         self.verbose = verbose
-        self.wandb_run_name = run_name
+        self.wandb_run_name = run_name if run_name is not None else f"{agent_name}_{code_name}"
         if self.verbose:
             self._print_configuration()
 

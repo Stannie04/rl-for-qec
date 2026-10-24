@@ -9,22 +9,22 @@ class GNNActor(nn.Module):
         super().__init__()
 
         self.env = env
-        self.use_action_mask = bool(config.use_action_mask)
 
         if config.use_neural_bp:
             self.encoder = NeuralBPEncoder(config, env)
             encoder_output_dim = config.neural_bp_hidden_dim
         else:
             self.encoder = CGNNEncoder(config, env)
-            encoder_output_dim = config.hidden_layers_gnn[-1]
+            encoder_output_dim = config.hidden_layers_cgnn[-1]
 
         action_head_layers = []
-        prev_dim = encoder_output_dim*2
+        prev_dim = encoder_output_dim * 2
         for hidden_dim in config.hidden_layers_mlp:
             action_head_layers.append(nn.Linear(prev_dim, hidden_dim))
             action_head_layers.append(nn.ReLU())
             prev_dim = hidden_dim
-        action_head_layers.append(nn.Linear(prev_dim, 1))
+        action_head_layers.append(nn.Linear(prev_dim, 2))
+
         self.action_head = nn.Sequential(*action_head_layers)
 
 
@@ -35,16 +35,18 @@ class GNNActor(nn.Module):
         batch = _get_batch(state, h.size(0), h.device)
 
         graph_feat = graph_mean_pool(h, state, batch)
+        num_graphs = graph_feat.size(0)
 
         q_h = h[data_qubit_mask]
         q_graph_feat = graph_feat[batch[data_qubit_mask]]
         q_input = torch.cat([q_h, q_graph_feat], dim=-1)
-        q_logits = self.action_head(q_input).squeeze(-1)
-        logits = q_logits.view(graph_feat.size(0), -1)
+        q_values = self.action_head(q_input).squeeze(-1)
 
-        if self.use_action_mask:
-            action_mask = get_action_mask(state, self.env)
-            logits = logits.masked_fill(~action_mask.unsqueeze(0), -1e9)
+        x_logits = q_values[:, 0].view(num_graphs, -1)
+        z_logits = q_values[:, 1].view(num_graphs, -1)
+
+        logits = torch.cat([x_logits, z_logits], dim=-1)
+
 
         log_probs = F.log_softmax(logits, dim=-1)
         probs = torch.exp(log_probs)
@@ -63,7 +65,7 @@ class GNNCritic(nn.Module):
             encoder_output_dim = config.neural_bp_hidden_dim
         else:
             self.encoder = CGNNEncoder(config, env)
-            encoder_output_dim = config.hidden_layers_gnn[-1]
+            encoder_output_dim = config.hidden_layers_cgnn[-1]
 
         action_head_layers = []
         prev_dim = encoder_output_dim*2
@@ -71,7 +73,7 @@ class GNNCritic(nn.Module):
             action_head_layers.append(nn.Linear(prev_dim, hidden_dim))
             action_head_layers.append(nn.ReLU())
             prev_dim = hidden_dim
-        action_head_layers.append(nn.Linear(prev_dim, 1))
+        action_head_layers.append(nn.Linear(prev_dim, 2))
         self.action_head = nn.Sequential(*action_head_layers)
 
 
@@ -81,15 +83,21 @@ class GNNCritic(nn.Module):
         h = self.encoder(state)
         batch = _get_batch(state, h.size(0), h.device)
         graph_feat = graph_mean_pool(h, state, batch)
+        num_graphs = graph_feat.size(0)
 
         q_h = h[data_qubit_mask]
         q_graph_feat = graph_feat[batch[data_qubit_mask]]
 
         q_input = torch.cat([q_h, q_graph_feat], dim=-1)
         q_values = self.action_head(q_input).squeeze(-1)
-        q_values = q_values.view(graph_feat.size(0), -1)
+
+        x_q = q_values[:, 0].view(num_graphs, -1)
+        z_q = q_values[:, 1].view(num_graphs, -1)
+
+        logits = torch.cat([x_q, z_q], dim=-1)
 
         if action is not None:
-            q_values = q_values.gather(1, action.long().unsqueeze(-1))
+            action = action.long().view(-1, 1)
+            logits = logits.gather(1, action)
 
-        return q_values
+        return logits

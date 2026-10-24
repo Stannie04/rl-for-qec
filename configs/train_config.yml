@@ -4,7 +4,7 @@ num_pretrain_timesteps: 100000
 max_episode_length: 5
 
 # Environment parameters
-noise_model: "bit_flip"
+noise_model: "depolarizing"
 
 # Evaluation parameters
 evaluate_during_training: True
