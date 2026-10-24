@@ -55,3 +55,10 @@ def weights(shots) -> np.ndarray   # nominal weight label per shot is NOT recove
 - `step6_reference.py`: on `d7_surface` and `d5_surface`, iid p in {0.001, 0.003, 0.005} and uniform weights 1..3: pymatching MWPM (X via H_z, Z via H_x, `pymatching.Matching(H)`) failure rate with the independent check vs BP; also the repo `MWPMAgent` path. Report both, flag any disagreement between the independent logical check and repo `has_logical_error` (count + 3 example indices).
 
 Each step module ends its `.md` with a short "Observation" section of at most 5 bullets stating what the numbers show (facts only; no speculation about fixes).
+
+## Step 7 (card BD8): `step7_stratified.py`
+iid depolarizing shots at p in {0.001, 0.002, 0.003, 0.004, 0.005} (`--n-per-weight` = shots per p, default 200000; `--quick` 2000). Decode with
+`common.decode_bp` using repo settings (`p_prior=2*curriculum_error_rate/3`, `max_iter=30`). Bin shots by `(n_x, n_z)` = number of X-type / Z-type flips
+(`n_x = shots[:,0].sum()`, etc.), keep bins with n_x+n_z <= 4 and one "5+" bin. Report per code and p: shots per bin, BP failure fraction per bin, and the
+reconstructed LER `sum_bins (bin share) * (bin failure fraction)` next to the directly measured LER. Also a table of failure fraction by `(n_x, n_z)` at p=0.001 only
+for bins (1,0), (0,1), (1,1), (2,0), (0,2), (1,2), (2,1). Ends with the usual "Observation" section.
