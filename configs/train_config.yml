@@ -1,21 +1,22 @@
 n_repetitions: 1
-num_timesteps: 10000
-num_sl_steps: 100000
-max_episode_length: 10
-
 specialize_agent: False
+
+num_rl_steps: 30000
+num_sl_steps: 100000
 
 # Environment parameters
 noise_model: "depolarizing"
 
-# Evaluation parameters
+# Evaluation parameters.
+## During training
 evaluate_during_training: True
-steps_between_evaluation: 1000
-eval_episodes_per_weight: 1000
-steps_between_pretrain_evaluation: 5000
-post_training_evaluation_episodes: 10000000
-max_evaluation_error: 4
+steps_between_evaluation_rl: 2500
+steps_between_evaluation_sl: 5000
+max_evaluation_error: 8
+eval_episodes_per_weight: 200
 
+## After training
+post_training_evaluation_episodes: 1000000
 
 evaluation_error_rates:
   - 0.001
@@ -38,11 +39,11 @@ hpo_error_rates:
 
 # Curriculum learning parameters
 curriculum_start_error_rate_144: 0.001 # Normalized error rate for 144 qubits, changes to the equivalent error rate for other code distances
-curriculum_end_error_rate_144: 0.01
-curriculum_warmup_steps: 5000
+curriculum_end_error_rate_144: 0.025
+curriculum_warmup_steps: 20000
 
 # Router (MoE) training parameters
-moe_num_timesteps: 10000
+moe_num_rl_steps: 10000
 moe_start_p: 0.15
 moe_end_p: 0.05
 moe_time_penalty_factor: 100
@@ -54,5 +55,6 @@ router_sl_batch_size: 128
 # Logging parameters for Weights & Biases
 wandb_logging: True
 wandb_project: "rl-for-qec"
+wandb_log_frequency: 1
 
 num_workers: 8

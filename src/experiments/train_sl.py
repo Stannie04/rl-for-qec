@@ -33,7 +33,7 @@ def train_sl(config):
         loss.backward()
         opt.step()
 
-        if (i+1) % config.steps_between_pretrain_evaluation == 0:
+        if (i+1) % config.steps_between_evaluation_sl == 0:
             evaluate_pretrained_encoder(config, model, checkpoint_dir, threshold=0.5, step=i+1)
 
 

@@ -40,18 +40,11 @@ def evaluate_agent(config: ConfigParser, step, best_model_ler, agent_name=None, 
         for i in range(config.max_evaluation_error)
     ]
 
-    print(f"{acc_per_weight[0]:.3f}, {acc_per_weight[1]:.3f}, {acc_per_weight[2]:.3f}, {acc_per_weight[3]:.3f}")
+    eval_string = "_".join([f"{ler:.2f}" for ler in acc_per_weight])
+    print(eval_string)
 
     if checkpoint_dir is not None:
-        filename = (
-            f"{checkpoint_dir}/eval_{step}_"
-            f"{acc_per_weight[0]:.2f}_"
-            f"{acc_per_weight[1]:.2f}_"
-            f"{acc_per_weight[2]:.2f}_"
-            f"{acc_per_weight[3]:.2f}.pt"
-        )
-        agent.save(filename)
-
+        agent.save(f"{checkpoint_dir}/eval_{step}_{eval_string}.pt")
         if ler < best_model_ler:
             best_model_ler = ler
 
@@ -130,5 +123,4 @@ def generalizability_evaluation(config, agents):
 
 def post_train_evaluation(config):
     # Evaluate the agent at the end of training and print results to console.
-    agents = config.moe_experts + ["router", "mwpm"]
-    per_to_ler_agents(config, agents, plot_file=f"results/per_to_ler/{config.code_name}.png")
+    per_to_ler_agents(config, config.agents_to_evaluate, plot_file=f"results/per_to_ler/{config.code_name}_bptest.png")

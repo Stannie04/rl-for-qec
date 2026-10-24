@@ -34,7 +34,7 @@ def objective(trial, base_config, eval_set, last_k=3):
     config.evaluate_during_training = True # required for pruning and the last-k average
     config.wandb_logging = False
 
-    shots = create_dataset_from_curriculum(config, num_samples=config.num_timesteps)
+    shots = create_dataset_from_curriculum(config, num_samples=config.num_rl_steps)
 
     env = QECEnv(config, shots)
     agent = SACAgent(env, config)

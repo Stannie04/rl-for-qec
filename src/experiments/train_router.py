@@ -23,7 +23,7 @@ class GraphDataset(Dataset):
 
 
 
-def rl_train_loop(config, env, agent, expert_list, inference_list, train=True):
+def moe_rl_train_loop(config, env, agent, expert_list, inference_list, train=True):
     start_time = time.time()
 
     checkpoint_dir = f"checkpoints/moe_{config.code_name}_{config.wandb_run_name}_{int(time.time())}"
@@ -34,10 +34,9 @@ def rl_train_loop(config, env, agent, expert_list, inference_list, train=True):
     losses = 0
     bp_correct = 0
     action_dist = 0
-
     results = {}
 
-    for step in tqdm(range(config.moe_num_timesteps)):
+    for step in tqdm(range(config.moe_num_rl_steps)):
     # for step, _ in tqdm(enumerate(env.shots)):
             # error_rate = get_physical_error_rate(config, step)
             # env.curriculum_error_rate = error_rate
@@ -73,7 +72,7 @@ def rl_train_loop(config, env, agent, expert_list, inference_list, train=True):
             results[pattern]["action_dist"] += 1 if action == 0 else 0
 
             if train and step % 100 == 0:
-                print(f"Step {step+1}/{config.moe_num_timesteps}, MOE success rate: {moe_correct / 100}, BP success rate: {bp_correct / 100}%, BP chosen: {action_dist / 100}%")
+                print(f"Step {step+1}/{config.moe_num_rl_steps}, MOE success rate: {moe_correct / 100}, BP success rate: {bp_correct / 100}%, BP chosen: {action_dist / 100}%")
                 save_path = os.path.join(checkpoint_dir, f"moe_{step+1}_{moe_correct}.pt")
                 agent.save(save_path)
                 losses = 0
@@ -81,10 +80,7 @@ def rl_train_loop(config, env, agent, expert_list, inference_list, train=True):
                 action_dist = 0
                 bp_correct = 0
 
-            # print(f"Step {step+1}/{config.moe_num_timesteps}, Action: {action}, Reward: {reward:.4f}, Loss: {loss:.4f}")
-
-    # print(f"MOE success rate: {successes / config.moe_num_timesteps}, BP success rate: {hits / config.moe_num_timesteps}%, BP chosen: {action_dist / config.moe_num_timesteps}%")
-    print(f"MoE Training completed in {time.time() - start_time:.2f} seconds. Success rate: {moe_correct / config.moe_num_timesteps:.4f}")
+    print(f"MoE Training completed in {time.time() - start_time:.2f} seconds. Success rate: {moe_correct / config.moe_num_rl_steps:.4f}")
 
     for pattern, pattern_results in results.items():
         total = pattern_results["hits"]
@@ -171,7 +167,7 @@ def evaluate_moe(config):
     agent = RouterAgent(config, env, router_checkpoint="checkpoints/evaluate_cps/router.pt")
     expert_list, inference_list = get_decoders(config, env)
 
-    rl_train_loop(config, env, agent, expert_list, inference_list, train=False)
+    moe_rl_train_loop(config, env, agent, expert_list, inference_list, train=False)
 
 
 def train_moe_rl(config):
@@ -179,7 +175,7 @@ def train_moe_rl(config):
     env = QECEnv(config, shots)
     agent = RouterAgent(config, env, encoder_checkpoint="checkpoints/evaluate_cps/sl_nbp_big.pt")
     expert_list, inference_list = get_decoders(config, env)
-    rl_train_loop(config, env, agent, expert_list, inference_list)
+    moe_rl_train_loop(config, env, agent, expert_list, inference_list)
 
 
 def train_moe_sl(config):
