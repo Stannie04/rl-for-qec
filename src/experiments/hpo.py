@@ -1,9 +1,16 @@
 import optuna
 import numpy as np
+import tempfile
+import os
+
+import copy
+import gc
+import torch
 
 from src.environment import QECEnv
 from src.agents import SACAgent
-from src.train_utils import evaluate_agent
+from src.train_utils import get_weighted_ler_on_eval_set, create_dataset_from_random_shots_labelled, create_dataset_from_curriculum
+from .train_rl import rl_training_loop
 
 
 def sample_sac_params(trial: optuna.Trial) -> dict:
@@ -11,66 +18,62 @@ def sample_sac_params(trial: optuna.Trial) -> dict:
     Define the search space for SAC hyperparameters.
     """
     return {
-        "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256, 512]),
-        "actor_learning_rate": trial.suggest_float("actor_learning_rate", 5e-6, 1e-3, log=True),
-        "critic_learning_rate": trial.suggest_float("critic_learning_rate", 5e-6, 1e-3, log=True),
-        "alpha_learning_rate": trial.suggest_float("alpha_learning_rate", 5e-6, 1e-3, log=True),
-        "replay_buffer_capacity": trial.suggest_int("replay_buffer_capacity", 10000, 1_000_000, log=True),
-        "gamma": trial.suggest_float("gamma", 0.90, 0.999),
-        "tau": trial.suggest_float("tau", 0.001, 0.02),
-        "train_frequency": trial.suggest_categorical("train_frequency", [1, 4, 8]),
-        "initial_alpha": trial.suggest_float("ent_coef", 1e-2, 3e-1, log=True),
-        "max_episode_length": trial.suggest_categorical("max_episode_length", [10, 50, 100]),
-        "curriculum_start_error_rate": trial.suggest_float("curriculum_start_error_rate", 0.01, 0.1),
-        "curriculum_end_error_rate": trial.suggest_float("curriculum_end_error_rate", 0.001, 0.01),
-        "curriculum_warmup_steps": trial.suggest_categorical("curriculum_warmup_steps", [1000, 5000, 10000]),
-        "hidden_dim": trial.suggest_categorical("hidden_dim", [128, 256, 512])
+        "curriculum_start_error_rate_144": trial.suggest_float("curriculum_start_error_rate_144", 5e-4, 3e-3, log=True),
+        "curriculum_end_error_rate_144": trial.suggest_float("curriculum_end_error_rate_144", 1e-2, 4e-2, log=True),
+        "curriculum_warmup_steps": trial.suggest_int("curriculum_warmup_steps", 2000, 10000, log=True),
+        "entropy_factor": trial.suggest_float("entropy_factor", 0.2, 0.7),
+        "initial_alpha": trial.suggest_float("initial_alpha", 0.02, 0.3, log=True),
+        "max_episode_length": trial.suggest_int("max_episode_length", 5, 25),
     }
 
 
 
-def objective(trial: optuna.Trial, config) -> float:
-    """
-    Objective function for Optuna.
-    """
-    env = QECEnv(config)
+def objective(trial, base_config, eval_set, last_k=3):
+    config = copy.deepcopy(base_config)
+    config.update(sample_sac_params(trial))
+    config.evaluate_during_training = True # required for pruning and the last-k average
+    config.wandb_logging = False
 
-    # Sample hyperparameters
-    hyperparams = sample_sac_params(trial)
-    config.update(hyperparams)
+    shots = create_dataset_from_curriculum(config, num_samples=config.num_timesteps)
+
+    env = QECEnv(config, shots)
     agent = SACAgent(env, config)
+    history = []
 
-    # Train
-    rewards = []
-    scores = []
-    obs, info = env.reset()
-    for step in range(config.num_timesteps):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ckpt = os.path.join(tmpdir, "eval_agent.pt")
 
-        action, probs = agent.select_action(obs)
-        next_obs, reward, terminated, truncated, info = env.step(action)
-        rewards.append(reward)
+        def _eval_fn(step, agent):
+            return get_weighted_ler_on_eval_set(config, agent, ckpt, eval_set)
 
-        agent.replay_buffer.push(obs, action, reward, next_obs, terminated or truncated)
-        obs = next_obs
+        def _on_eval(step, ler):
+            history.append(ler)
+            trial.report(ler, step)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
 
-        agent.train_step()
-
-        if terminated or truncated:
-            obs, info = env.reset()
-
-        if step % config.steps_between_evaluation == 0:
-            scores.append(evaluate_agent(config, agent)["Evaluation/Score"])
-
-    # Evaluate mean reward over last 100 episodes
-    eval_scores = min(100, len(scores))
-    mean_score = np.mean(scores[:eval_scores])
-
-    return mean_score
+        try:
+            rl_training_loop(env, agent, config, eval_fn=_eval_fn, on_eval=_on_eval)
+            return float(np.mean(history[-last_k:]))
+        finally:
+            del agent, env
+            gc.collect()
+            torch.cuda.empty_cache()
 
 
-def optimize_hyperparameters(config, n_trials=1000):
-    study = optuna.create_study(direction="maximize", study_name="hpo", storage=f"sqlite:///hpo_study_{config.n}_{config.k}_{config.d}.db", load_if_exists=True)
-    study.optimize(lambda trial: objective(trial, config), n_trials=n_trials)
+def optimize_hyperparameters(config):
+    eval_set = create_dataset_from_random_shots_labelled(config, num_samples=config.hpo_num_eval_samples, error_rates=config.hpo_error_rates)
+
+    study = optuna.create_study(
+        direction="minimize",
+        study_name="hpo",
+        storage=f"sqlite:///hpo_study_{config.code_name}.db",
+        load_if_exists=True,
+        sampler=optuna.samplers.TPESampler(seed=0, multivariate=True),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=3),
+    )
+
+    study.optimize(lambda trial: objective(trial, config, eval_set), n_trials=config.hpo_num_trials)
 
     print("Best hyperparameters:", study.best_params)
     return study.best_params

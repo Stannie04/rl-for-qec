@@ -45,7 +45,7 @@ def log_wandb_data(step, env, start_time, probs, **kwargs):
     wandb.log(all_logs, step=step)
 
 
-def single_agent_training_loop(env, agent, config, checkpoint_dir=None):
+def rl_training_loop(env, agent, config, checkpoint_dir=None, eval_fn=None, on_eval=None):
 
     start_time = time.time()
     curriculum = CurriculumScheduler(config)
@@ -54,6 +54,17 @@ def single_agent_training_loop(env, agent, config, checkpoint_dir=None):
     start_x_errors = info["num_x_errors"]
     start_z_errors = info["num_z_errors"]
     best_model_ler = float("inf")
+
+    def _run_eval(step):
+        nonlocal best_model_ler
+        if eval_fn is None:
+            score, best_model_ler = evaluate_agent(config, step, best_model_ler, agent, checkpoint_dir)
+        else:
+            score = eval_fn(step, agent)
+            best_model_ler = min(best_model_ler, score)
+        if on_eval is not None:
+            on_eval(step, score)                # may raise optuna.TrialPruned, which propagates out
+        return score
 
     for step, _ in enumerate(tqdm(env.shots)):
         train_step_logs, done_logs, eval_logs = {}, {}, {}
@@ -77,14 +88,14 @@ def single_agent_training_loop(env, agent, config, checkpoint_dir=None):
             start_x_errors = info["num_x_errors"]
             start_z_errors = info["num_z_errors"]
 
-        if config.evaluate_during_training and step % config.steps_between_evaluation == 0:
-            ler, best_model_ler = evaluate_agent(config, step, best_model_ler, agent, checkpoint_dir)
-            eval_logs = {"Evaluation/Logical Error Rate": ler, "Evaluation/Best Logical Error Rate": best_model_ler}
+        if config.evaluate_during_training and step > 0 and step % config.steps_between_evaluation == 0:
+            score = _run_eval(step)
+            eval_logs = {"Evaluation/Logical Error Rate": score, "Evaluation/Best Logical Error Rate": best_model_ler}
 
         if config.wandb_logging:
             log_wandb_data(step, env, start_time, probs, **train_step_logs, **eval_logs, **done_logs)
 
-    evaluate_agent(config, len(env.shots), best_model_ler, agent, checkpoint_dir)
+    return evaluate_agent(config, len(env.shots), best_model_ler, agent, checkpoint_dir)
 
 
 def train_rl(config):
