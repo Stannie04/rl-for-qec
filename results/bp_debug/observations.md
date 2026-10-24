@@ -323,3 +323,39 @@ $$
 - **The 'reconstructed LER' check is not an independent test.** The bins partition all shots, so the reconstructed LER equals the direct LER
   to $10^{-20}$ by construction. What the step does show is the per-bin structure above. I should not cite the equality as evidence.
 - The all-zero gross-code bins confirm that BP does well on gross even for $(2,2)$ and $5+$ shots at these $p$.
+
+## O8. The weight-1 failing qubits are exactly the qubits whose column in $H$ is duplicated (degeneracy confirmed)
+
+Check (`degeneracy_check.py`, written by the orchestrator, no card): for X errors BP decodes with $H_z$, for Z errors with $H_x$. For each
+qubit $j$ I test whether its column $H_{:,j}$ is non-zero and identical to the column of some other qubit. Such a pair gives BP the same
+likelihood for either qubit. I compare that set with the step-2 failing sets.
+
+| code | Pauli | qubits with a duplicate column | step-2 failing qubits | in both | dup but not failing | failing but not dup |
+|---|---|---|---|---|---|---|
+| d7_surface | X | 12 | 12 | 12 | 0 | 0 |
+| d7_surface | Z | 12 | 12 | 12 | 0 | 0 |
+| 288_8_12_tile | X | 20 | 20 | 20 | 0 | 0 |
+| 288_8_12_tile | Z | 20 | 20 | 20 | 0 | 0 |
+| 144_12_12_ldpc | X | 0 | 0 | 0 | 0 | 0 |
+| 144_12_12_ldpc | Z | 0 | 0 | 0 | 0 | 0 |
+
+The two sets are identical in all six cases, so this is an exact rule, not a correlation:
+
+$$
+\text{BP fails on a single error at qubit } j
+\iff
+\exists\, j'\neq j:\ H_{:,j}=H_{:,j'}\neq 0 .
+$$
+
+Mechanism. A weight-2 operator $E_j E_{j'}$ with identical columns has zero syndrome. On a $d=7$ code a zero-syndrome weight-2 operator
+cannot be a logical operator, so it is a stabilizer, and either guess ($j$ or $j'$) is a *correct* decode. BP does not know that. With
+symmetric priors and symmetric messages the posterior is a coin flip between the two, the hard decision never settles on one qubit, the
+syndrome never matches, and `converge=False` (O2). This is also why more iterations (O4) and a different prior (O5) do nothing: the tie is exact,
+and neither knob breaks it. OSD or LSD resolves it by a linear-algebra step (O6).
+
+So the BP error is not wrong decoding, it is **BP giving up on a harmless degeneracy**, and the "failure" is counted as an error because the
+non-converged residual still has syndrome. The gross code ([[144,12,12]] bivariate bicycle) has no duplicate columns, which is why BP is fine there.
+
+Candidate fixes, all untested (the issue says no fixes here): (1) use BP+OSD or BP+LSD for the surface and tile codes (already working,
+O6); (2) break ties in plain BP with a tiny qubit-dependent prior (e.g. jitter the prior by about 1%) or with decimation; (3) report
+BP only on codes without duplicate columns. Option 2 is a one-line experiment worth a card.
