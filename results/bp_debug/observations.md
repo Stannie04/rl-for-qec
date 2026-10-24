@@ -242,3 +242,84 @@ Reading it:
 Status after O1-O5: boundary-qubit single errors fail, BP never converges on them, no prior, no iteration count, no min-sum/schedule
 setting fixes it, MWPM is clean. The remaining open items are step 1 (rerun of the repo evaluation on current HEAD, with BP+OSD for
 reference) and step 7 (stratified check that the weight-1 bins add up to the reported LER).
+
+## O6. The repo evaluation reproduces the bad BP numbers; BP+OSD, BP+LSD and MWPM are near-perfect on the same shots
+
+Step 1 (`step1_rerun.py`, card BD2): `create_dataset_from_uniform_shots`, 5000 shots per nominal weight $w=1..5$ ($w$ X flips and $w$ Z flips
+at independent positions), seed 0. Each shot is decoded two ways: the repo path (`get_agent_and_inference` + `classical_inference`) and the
+debug helper (`common.decode_bp`). Failure fraction, repo path:
+
+| code | decoder | w=1 | w=2 | w=3 | w=4 | w=5 |
+|---|---|---|---|---|---|---|
+| d7_surface | BP | 0.437 | 0.745 | 0.907 | 0.974 | 0.991 |
+| d7_surface | BP+OSD | 0 | 0 | 0 | 0.047 | 0.154 |
+| d7_surface | BP+LSD | 0 | 0 | 0 | 0.047 | 0.154 |
+| d7_surface | MWPM | 0 | 0 | 0 | 0.047 | 0.153 |
+| 288_8_12_tile | BP | 0.132 | 0.248 | 0.356 | 0.448 | 0.529 |
+| 288_8_12_tile | BP+OSD | 0 | 0 | 0.0004 | 0.0004 | 0.002 |
+| 288_8_12_tile | BP+LSD | 0 | 0 | 0.0002 | 0.0004 | 0.002 |
+| 144_12_12_ldpc | BP | 0 | 0 | 0.006 | 0.017 | 0.032 |
+| 144_12_12_ldpc | BP+OSD | 0 | 0 | 0.005 | 0.016 | 0.027 |
+| 144_12_12_ldpc | BP+LSD | 0 | 0 | 0.005 | 0.014 | 0.024 |
+
+Reading it:
+
+- **Reproduced on the current code.** The repo path gives the BP numbers of the three-codes heatmaps (surface 404924/500000 in the
+  original run at mixed weights; here 0.44 to 0.99 per weight). The plain BP failure is not an artefact of an old plot (H4, outdated results).
+- **The two paths agree for BP.** repo vs `common.decode_bp`: 0 disagreements on all 75000 BP shots (25000 per code). So the debug
+  helpers measure the same thing the repo does.
+- **Same matrices, same syndromes, three other decoders work.** On surface $w\le3$, BP+OSD, BP+LSD and MWPM fail 0 of 5000. The surface
+  $w=4,5$ rows (0.047, 0.154) are the same for all three, and coincide with MWPM, i.e. they are the weights where more than
+  $\lfloor(d-1)/2\rfloor=3$ X flips exist and nobody can decode. The corresponding fact in F2: heatmap weight 4-5 on the surface code is simply too dense.
+- The gross code is healthy for BP, and OSD/LSD add little there (0.032 vs 0.027 at $w=5$).
+
+Caveats (small, open):
+
+- MWPM returned `error` on the tile and gross codes. Probably these are not matchable (columns of weight >2 in $H$), not investigated.
+- BP+OSD repo-vs-helper disagreements: 4/25000 (surface), 4/25000 (tile), 23/25000 (gross); BP+LSD 0, 0, 1. Plain BP: 0.
+  Likely OSD tie-breaking differs between the two paths, unexplained, and it does not touch the plain-BP conclusion.
+
+## O7. Stratified by number of flips: at small p, shots with one flip per plane carry most BP failures
+
+Step 7 (`step7_stratified.py`, card BD8): iid depolarizing shots, 200000 per $p\in\{0.001..0.005\}$ per code, repo BP. Bins are
+$(n_x,n_z)$ = number of X and Z flips. Failure fraction per bin (selected rows; full table in `step7_stratified.md`):
+
+| code | bin | p=0.001 | p=0.003 | p=0.005 |
+|---|---|---|---|---|
+| d7_surface | (0,1) | 0.231 | 0.246 | 0.243 |
+| d7_surface | (1,0) | 0.254 | 0.250 | 0.249 |
+| d7_surface | (1,1) | 0.479 | 0.489 | 0.488 |
+| d7_surface | (2,2) | 0.833 | 0.768 | 0.804 |
+| 288_8_12_tile | (0,1) | 0.067 | 0.068 | 0.069 |
+| 288_8_12_tile | (1,0) | 0.070 | 0.070 | 0.070 |
+| 288_8_12_tile | (1,1) | 0.132 | 0.135 | 0.135 |
+| 288_8_12_tile | 5+ | 0.302 | 0.338 | 0.353 |
+| 144_12_12_ldpc | any bin | 0 | 0 | 0 |
+
+Observations:
+
+- **Failure per bin does not depend on $p$.** The (0,1) bin on the surface code is 0.231, 0.246, 0.243 across a factor 5 in $p$. This is what a purely
+  geometric failure (O1) predicts: given a single flip, the chance that it lands on a bad qubit is a property of the code.
+- **Bin rates equal the O1 numbers.** The surface (0,1) and (1,0) bins sit at 0.245 and the tile ones at 0.069, which is $12/49$ and $20/288$ from O1.
+  The (1,1) bin is almost entirely a Y error on one qubit (a Y is far more likely than an X and a Z on two different qubits), and its rate 0.489 vs 0.490 (O1, Y) and 0.135 vs 0.139 (O1, tile Y) agrees.
+
+$$
+\text{surface:}\ \frac{12}{49}=0.245\ \leftrightarrow\ 0.246,\qquad
+\frac{24}{49}=0.490\ \leftrightarrow\ 0.489;\qquad
+\text{tile:}\ \frac{20}{288}=0.069\ \leftrightarrow\ 0.068,\qquad
+\frac{40}{288}=0.139\ \leftrightarrow\ 0.135 .
+$$
+
+- **Share of the failures from shots with at most one flip per plane** (bins (0,1), (1,0), (1,1)):
+
+| code | p=0.001 | p=0.003 | p=0.005 |
+|---|---|---|---|
+| d7_surface | 96.6% | 90% | 82.9% |
+| 288_8_12_tile | 78.5% | 49% | 30.6% |
+
+  On the surface code single-flip shots account for almost all failures through $p=0.005$. On the tile code that share falls with $p$ because at 288
+  qubits a shot at $p=0.005$ has on average $np\approx1.4$ flips; the multi-flip bins fail at 0.14 to 0.35 and take over.
+  Figure: `o7_failure_share.png`.
+- **The 'reconstructed LER' check is not an independent test.** The bins partition all shots, so the reconstructed LER equals the direct LER
+  to $10^{-20}$ by construction. What the step does show is the per-bin structure above. I should not cite the equality as evidence.
+- The all-zero gross-code bins confirm that BP does well on gross even for $(2,2)$ and $5+$ shots at these $p$.
