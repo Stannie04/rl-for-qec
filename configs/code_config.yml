@@ -158,3 +158,9 @@ d7_surface:
   n: 49
   k: 1
   d: 7
+
+d11_surface:
+  code_type: surface
+  n: 156
+  k: 1
+  d: 11
