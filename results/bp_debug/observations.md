@@ -195,3 +195,50 @@ Together with O2 (failures are non-convergence) and O3 (MWPM is fine), this says
 qubits, and no knob in `BpDecoder` that was swept changes that. Not swept: damping or memory-BP (not exposed in this `ldpc` version
 as far as I could check), and a matched-prior sweep (step 3, still running). A decoder that does not need BP to converge,
 such as BP+OSD or BP+LSD, is the natural fix, and it is what the original three-codes results already show works.
+
+## O5. The BP prior is not the problem (H1 ruled out)
+
+Step 3 (`step3_prior_sweep.py`, card BD4). Same shots, seven priors per shot set: the matched value $2p/3$, $2p$, $p$, the repo value
+($2\cdot\text{curriculum}/3$), and fixed 0.01, 0.05, 0.1. Part A: uniform shots, weights 1-3, 5000 shots per cell.
+Part B: iid depolarizing, $p=0.001..0.005$, 20000 shots per cell.
+
+Repo prior per code, against the rate it should have at $p=0.001$:
+
+| code | n | repo prior | matched $2p/3$ at p=0.001 | ratio |
+|---|---|---|---|---|
+| d7_surface | 49 | 0.00196 | 0.00067 | 2.9x too high |
+| 288_8_12_tile | 288 | 0.00033 | 0.00067 | 2x too low |
+| 144_12_12_ldpc | 144 | 0.00067 | 0.00067 | 1x |
+
+iid shots (BP failure fraction; matched prior vs the extreme prior 0.1, which is up to $0.1/0.00067\approx150$ times too high):
+
+| code | p | matched 2p/3 | repo | 0.1 |
+|---|---|---|---|---|
+| d7_surface | 0.001 | 0.0159 | 0.0159 | 0.0159 |
+| d7_surface | 0.003 | 0.0481 | 0.0481 | 0.0481 |
+| d7_surface | 0.005 | 0.0750 | 0.0750 | 0.0750 |
+| 288_8_12_tile | 0.001 | 0.0283 | 0.0283 | 0.0283 |
+| 288_8_12_tile | 0.003 | 0.0762 | 0.0762 | 0.0767 |
+| 288_8_12_tile | 0.005 | 0.1281 | 0.1282 | 0.1287 |
+
+Uniform shots, weight 1 (one X and one Z flip): d7_surface 0.4368 for **every** prior; tile 0.1366 for every prior. At weights 2 and 3 the
+priors differ in the third decimal at most (d7 w=3: 0.8988 matched, 0.9298 for $2p$), noise level for 5000 shots.
+
+Figure: `o5_prior_sweep.png`.
+
+Reading it:
+
+- **H1 is ruled out.** With the prior matched exactly to the evaluated $p$, the surface and tile failure is the same as with
+  the repo prior or with a prior off by 150x. This was suggested already by O1, where the weight-1 failing sets did not move, and
+  it now holds on the real iid distribution too.
+- The reason is structural. At weight 1 the BP input is one fired check per plane. The prior only rescales all prior LLRs by the same
+  constant $L=\ln\frac{1-q}{q}$, so it cannot break a tie between two qubits whose columns in $H$ are identical. This is the same
+  degeneracy story as in O2 and O4, still a hypothesis.
+- The worry from F3 (the $144/n$ rescaling of the curriculum rate) is real in the sense that the prior is wrong, but it has no effect on the result.
+  I would not touch it for this bug. It could matter if the BP agent is later used as a comparison against a learned agent
+  evaluated across $p$, but that is a cleanliness question, not the cause of the 80% error.
+- 144_12_12_ldpc stays at 0.0000-0.0001 for every prior in iid, so it cannot tell priors apart.
+
+Status after O1-O5: boundary-qubit single errors fail, BP never converges on them, no prior, no iteration count, no min-sum/schedule
+setting fixes it, MWPM is clean. The remaining open items are step 1 (rerun of the repo evaluation on current HEAD, with BP+OSD for
+reference) and step 7 (stratified check that the weight-1 bins add up to the reported LER).

@@ -1,0 +1,1599 @@
+{
+  "module": "step7_stratified",
+  "seed": 0,
+  "n_per_p": 200000,
+  "quick": false,
+  "p_values": [
+    0.001,
+    0.002,
+    0.003,
+    0.004,
+    0.005
+  ],
+  "codes": {
+    "d7_surface": {
+      "code_name": "d7_surface",
+      "n": 49,
+      "curriculum_error_rate": 0.002938775510204082,
+      "p_prior": 0.001959183673469388,
+      "per_p": {
+        "0.001": {
+          "n_shots": 200000,
+          "failures": 3155,
+          "direct_ler": 0.015775,
+          "reconstructed_ler": 0.015775,
+          "bins": {
+            "(0,0)": {
+              "shots": 190386,
+              "share": 0.95193,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 3133,
+              "share": 0.015665,
+              "failures": 723,
+              "failure_fraction": 0.23076923076923078
+            },
+            "(1,0)": {
+              "shots": 3088,
+              "share": 0.01544,
+              "failures": 784,
+              "failure_fraction": 0.2538860103626943
+            },
+            "(0,2)": {
+              "shots": 25,
+              "share": 0.000125,
+              "failures": 10,
+              "failure_fraction": 0.4
+            },
+            "(1,1)": {
+              "shots": 3222,
+              "share": 0.01611,
+              "failures": 1542,
+              "failure_fraction": 0.478584729981378
+            },
+            "(2,0)": {
+              "shots": 26,
+              "share": 0.00013,
+              "failures": 10,
+              "failure_fraction": 0.38461538461538464
+            },
+            "(0,3)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(1,2)": {
+              "shots": 37,
+              "share": 0.000185,
+              "failures": 25,
+              "failure_fraction": 0.6756756756756757
+            },
+            "(2,1)": {
+              "shots": 58,
+              "share": 0.00029,
+              "failures": 40,
+              "failure_fraction": 0.6896551724137931
+            },
+            "(3,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(0,4)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(1,3)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(2,2)": {
+              "shots": 24,
+              "share": 0.00012,
+              "failures": 20,
+              "failure_fraction": 0.8333333333333334
+            },
+            "(3,1)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(4,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "5+": {
+              "shots": 1,
+              "share": 5e-06,
+              "failures": 1,
+              "failure_fraction": 1.0
+            }
+          }
+        },
+        "0.002": {
+          "n_shots": 200000,
+          "failures": 6366,
+          "direct_ler": 0.03183,
+          "reconstructed_ler": 0.03183,
+          "bins": {
+            "(0,0)": {
+              "shots": 181289,
+              "share": 0.906445,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 5950,
+              "share": 0.02975,
+              "failures": 1439,
+              "failure_fraction": 0.24184873949579833
+            },
+            "(1,0)": {
+              "shots": 5856,
+              "share": 0.02928,
+              "failures": 1479,
+              "failure_fraction": 0.2525614754098361
+            },
+            "(0,2)": {
+              "shots": 91,
+              "share": 0.000455,
+              "failures": 37,
+              "failure_fraction": 0.4065934065934066
+            },
+            "(1,1)": {
+              "shots": 6211,
+              "share": 0.031055,
+              "failures": 3023,
+              "failure_fraction": 0.4867171147963291
+            },
+            "(2,0)": {
+              "shots": 95,
+              "share": 0.000475,
+              "failures": 37,
+              "failure_fraction": 0.3894736842105263
+            },
+            "(0,3)": {
+              "shots": 1,
+              "share": 5e-06,
+              "failures": 1,
+              "failure_fraction": 1.0
+            },
+            "(1,2)": {
+              "shots": 187,
+              "share": 0.000935,
+              "failures": 130,
+              "failure_fraction": 0.6951871657754011
+            },
+            "(2,1)": {
+              "shots": 206,
+              "share": 0.00103,
+              "failures": 130,
+              "failure_fraction": 0.6310679611650486
+            },
+            "(3,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(0,4)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(1,3)": {
+              "shots": 2,
+              "share": 1e-05,
+              "failures": 2,
+              "failure_fraction": 1.0
+            },
+            "(2,2)": {
+              "shots": 102,
+              "share": 0.00051,
+              "failures": 78,
+              "failure_fraction": 0.7647058823529411
+            },
+            "(3,1)": {
+              "shots": 5,
+              "share": 2.5e-05,
+              "failures": 5,
+              "failure_fraction": 1.0
+            },
+            "(4,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "5+": {
+              "shots": 5,
+              "share": 2.5e-05,
+              "failures": 5,
+              "failure_fraction": 1.0
+            }
+          }
+        },
+        "0.003": {
+          "n_shots": 200000,
+          "failures": 9625,
+          "direct_ler": 0.048125,
+          "reconstructed_ler": 0.048125,
+          "bins": {
+            "(0,0)": {
+              "shots": 172399,
+              "share": 0.861995,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 8552,
+              "share": 0.04276,
+              "failures": 2104,
+              "failure_fraction": 0.2460243217960711
+            },
+            "(1,0)": {
+              "shots": 8464,
+              "share": 0.04232,
+              "failures": 2117,
+              "failure_fraction": 0.25011814744801514
+            },
+            "(0,2)": {
+              "shots": 201,
+              "share": 0.001005,
+              "failures": 96,
+              "failure_fraction": 0.47761194029850745
+            },
+            "(1,1)": {
+              "shots": 8998,
+              "share": 0.04499,
+              "failures": 4404,
+              "failure_fraction": 0.4894420982440542
+            },
+            "(2,0)": {
+              "shots": 203,
+              "share": 0.001015,
+              "failures": 92,
+              "failure_fraction": 0.45320197044334976
+            },
+            "(0,3)": {
+              "shots": 3,
+              "share": 1.5e-05,
+              "failures": 2,
+              "failure_fraction": 0.6666666666666666
+            },
+            "(1,2)": {
+              "shots": 432,
+              "share": 0.00216,
+              "failures": 285,
+              "failure_fraction": 0.6597222222222222
+            },
+            "(2,1)": {
+              "shots": 433,
+              "share": 0.002165,
+              "failures": 281,
+              "failure_fraction": 0.648960739030023
+            },
+            "(3,0)": {
+              "shots": 2,
+              "share": 1e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,4)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(1,3)": {
+              "shots": 9,
+              "share": 4.5e-05,
+              "failures": 8,
+              "failure_fraction": 0.8888888888888888
+            },
+            "(2,2)": {
+              "shots": 263,
+              "share": 0.001315,
+              "failures": 202,
+              "failure_fraction": 0.7680608365019012
+            },
+            "(3,1)": {
+              "shots": 13,
+              "share": 6.5e-05,
+              "failures": 11,
+              "failure_fraction": 0.8461538461538461
+            },
+            "(4,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "5+": {
+              "shots": 28,
+              "share": 0.00014,
+              "failures": 23,
+              "failure_fraction": 0.8214285714285714
+            }
+          }
+        },
+        "0.004": {
+          "n_shots": 200000,
+          "failures": 12702,
+          "direct_ler": 0.06351,
+          "reconstructed_ler": 0.06351,
+          "bins": {
+            "(0,0)": {
+              "shots": 164227,
+              "share": 0.821135,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 10756,
+              "share": 0.05378,
+              "failures": 2646,
+              "failure_fraction": 0.24600223131275567
+            },
+            "(1,0)": {
+              "shots": 10777,
+              "share": 0.053885,
+              "failures": 2665,
+              "failure_fraction": 0.24728588661037396
+            },
+            "(0,2)": {
+              "shots": 358,
+              "share": 0.00179,
+              "failures": 164,
+              "failure_fraction": 0.4581005586592179
+            },
+            "(1,1)": {
+              "shots": 11487,
+              "share": 0.057435,
+              "failures": 5599,
+              "failure_fraction": 0.48742056237485853
+            },
+            "(2,0)": {
+              "shots": 344,
+              "share": 0.00172,
+              "failures": 172,
+              "failure_fraction": 0.5
+            },
+            "(0,3)": {
+              "shots": 8,
+              "share": 4e-05,
+              "failures": 6,
+              "failure_fraction": 0.75
+            },
+            "(1,2)": {
+              "shots": 723,
+              "share": 0.003615,
+              "failures": 487,
+              "failure_fraction": 0.673582295988935
+            },
+            "(2,1)": {
+              "shots": 747,
+              "share": 0.003735,
+              "failures": 500,
+              "failure_fraction": 0.6693440428380187
+            },
+            "(3,0)": {
+              "shots": 4,
+              "share": 2e-05,
+              "failures": 1,
+              "failure_fraction": 0.25
+            },
+            "(0,4)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(1,3)": {
+              "shots": 23,
+              "share": 0.000115,
+              "failures": 21,
+              "failure_fraction": 0.9130434782608695
+            },
+            "(2,2)": {
+              "shots": 453,
+              "share": 0.002265,
+              "failures": 362,
+              "failure_fraction": 0.7991169977924945
+            },
+            "(3,1)": {
+              "shots": 31,
+              "share": 0.000155,
+              "failures": 24,
+              "failure_fraction": 0.7741935483870968
+            },
+            "(4,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "5+": {
+              "shots": 62,
+              "share": 0.00031,
+              "failures": 55,
+              "failure_fraction": 0.8870967741935484
+            }
+          }
+        },
+        "0.005": {
+          "n_shots": 200000,
+          "failures": 15741,
+          "direct_ler": 0.078705,
+          "reconstructed_ler": 0.078705,
+          "bins": {
+            "(0,0)": {
+              "shots": 156387,
+              "share": 0.781935,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 12840,
+              "share": 0.0642,
+              "failures": 3122,
+              "failure_fraction": 0.24314641744548288
+            },
+            "(1,0)": {
+              "shots": 12820,
+              "share": 0.0641,
+              "failures": 3186,
+              "failure_fraction": 0.2485179407176287
+            },
+            "(0,2)": {
+              "shots": 517,
+              "share": 0.002585,
+              "failures": 245,
+              "failure_fraction": 0.4738878143133462
+            },
+            "(1,1)": {
+              "shots": 13820,
+              "share": 0.0691,
+              "failures": 6738,
+              "failure_fraction": 0.4875542691751085
+            },
+            "(2,0)": {
+              "shots": 511,
+              "share": 0.002555,
+              "failures": 254,
+              "failure_fraction": 0.49706457925636005
+            },
+            "(0,3)": {
+              "shots": 15,
+              "share": 7.5e-05,
+              "failures": 11,
+              "failure_fraction": 0.7333333333333333
+            },
+            "(1,2)": {
+              "shots": 1084,
+              "share": 0.00542,
+              "failures": 723,
+              "failure_fraction": 0.6669741697416974
+            },
+            "(2,1)": {
+              "shots": 1126,
+              "share": 0.00563,
+              "failures": 752,
+              "failure_fraction": 0.6678507992895204
+            },
+            "(3,0)": {
+              "shots": 10,
+              "share": 5e-05,
+              "failures": 6,
+              "failure_fraction": 0.6
+            },
+            "(0,4)": {
+              "shots": 1,
+              "share": 5e-06,
+              "failures": 1,
+              "failure_fraction": 1.0
+            },
+            "(1,3)": {
+              "shots": 43,
+              "share": 0.000215,
+              "failures": 37,
+              "failure_fraction": 0.8604651162790697
+            },
+            "(2,2)": {
+              "shots": 652,
+              "share": 0.00326,
+              "failures": 524,
+              "failure_fraction": 0.803680981595092
+            },
+            "(3,1)": {
+              "shots": 54,
+              "share": 0.00027,
+              "failures": 41,
+              "failure_fraction": 0.7592592592592593
+            },
+            "(4,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "5+": {
+              "shots": 120,
+              "share": 0.0006,
+              "failures": 101,
+              "failure_fraction": 0.8416666666666667
+            }
+          }
+        }
+      }
+    },
+    "288_8_12_tile": {
+      "code_name": "288_8_12_tile",
+      "n": 288,
+      "curriculum_error_rate": 0.0005,
+      "p_prior": 0.0003333333333333333,
+      "per_p": {
+        "0.001": {
+          "n_shots": 200000,
+          "failures": 5168,
+          "direct_ler": 0.02584,
+          "reconstructed_ler": 0.02584,
+          "bins": {
+            "(0,0)": {
+              "shots": 149892,
+              "share": 0.74946,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 14360,
+              "share": 0.0718,
+              "failures": 964,
+              "failure_fraction": 0.06713091922005571
+            },
+            "(1,0)": {
+              "shots": 14557,
+              "share": 0.072785,
+              "failures": 1023,
+              "failure_fraction": 0.070275468846603
+            },
+            "(0,2)": {
+              "shots": 655,
+              "share": 0.003275,
+              "failures": 77,
+              "failure_fraction": 0.11755725190839694
+            },
+            "(1,1)": {
+              "shots": 15705,
+              "share": 0.078525,
+              "failures": 2072,
+              "failure_fraction": 0.13193250557147404
+            },
+            "(2,0)": {
+              "shots": 693,
+              "share": 0.003465,
+              "failures": 113,
+              "failure_fraction": 0.16305916305916307
+            },
+            "(0,3)": {
+              "shots": 30,
+              "share": 0.00015,
+              "failures": 7,
+              "failure_fraction": 0.23333333333333334
+            },
+            "(1,2)": {
+              "shots": 1480,
+              "share": 0.0074,
+              "failures": 298,
+              "failure_fraction": 0.20135135135135135
+            },
+            "(2,1)": {
+              "shots": 1414,
+              "share": 0.00707,
+              "failures": 296,
+              "failure_fraction": 0.20933521923620935
+            },
+            "(3,0)": {
+              "shots": 20,
+              "share": 0.0001,
+              "failures": 3,
+              "failure_fraction": 0.15
+            },
+            "(0,4)": {
+              "shots": 1,
+              "share": 5e-06,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,3)": {
+              "shots": 68,
+              "share": 0.00034,
+              "failures": 18,
+              "failure_fraction": 0.2647058823529412
+            },
+            "(2,2)": {
+              "shots": 860,
+              "share": 0.0043,
+              "failures": 217,
+              "failure_fraction": 0.25232558139534883
+            },
+            "(3,1)": {
+              "shots": 59,
+              "share": 0.000295,
+              "failures": 18,
+              "failure_fraction": 0.3050847457627119
+            },
+            "(4,0)": {
+              "shots": 1,
+              "share": 5e-06,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "5+": {
+              "shots": 205,
+              "share": 0.001025,
+              "failures": 62,
+              "failure_fraction": 0.3024390243902439
+            }
+          }
+        },
+        "0.002": {
+          "n_shots": 200000,
+          "failures": 10349,
+          "direct_ler": 0.051745,
+          "reconstructed_ler": 0.051745,
+          "bins": {
+            "(0,0)": {
+              "shots": 112088,
+              "share": 0.56044,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 21636,
+              "share": 0.10818,
+              "failures": 1460,
+              "failure_fraction": 0.0674801257163986
+            },
+            "(1,0)": {
+              "shots": 21643,
+              "share": 0.108215,
+              "failures": 1532,
+              "failure_fraction": 0.0707850113200573
+            },
+            "(0,2)": {
+              "shots": 2039,
+              "share": 0.010195,
+              "failures": 280,
+              "failure_fraction": 0.1373222167729279
+            },
+            "(1,1)": {
+              "shots": 25888,
+              "share": 0.12944,
+              "failures": 3482,
+              "failure_fraction": 0.13450247218788627
+            },
+            "(2,0)": {
+              "shots": 2100,
+              "share": 0.0105,
+              "failures": 301,
+              "failure_fraction": 0.14333333333333334
+            },
+            "(0,3)": {
+              "shots": 120,
+              "share": 0.0006,
+              "failures": 24,
+              "failure_fraction": 0.2
+            },
+            "(1,2)": {
+              "shots": 4588,
+              "share": 0.02294,
+              "failures": 894,
+              "failure_fraction": 0.1948561464690497
+            },
+            "(2,1)": {
+              "shots": 4593,
+              "share": 0.022965,
+              "failures": 934,
+              "failure_fraction": 0.20335292836925756
+            },
+            "(3,0)": {
+              "shots": 112,
+              "share": 0.00056,
+              "failures": 21,
+              "failure_fraction": 0.1875
+            },
+            "(0,4)": {
+              "shots": 5,
+              "share": 2.5e-05,
+              "failures": 2,
+              "failure_fraction": 0.4
+            },
+            "(1,3)": {
+              "shots": 425,
+              "share": 0.002125,
+              "failures": 127,
+              "failure_fraction": 0.2988235294117647
+            },
+            "(2,2)": {
+              "shots": 2865,
+              "share": 0.014325,
+              "failures": 694,
+              "failure_fraction": 0.24223385689354276
+            },
+            "(3,1)": {
+              "shots": 449,
+              "share": 0.002245,
+              "failures": 124,
+              "failure_fraction": 0.27616926503340755
+            },
+            "(4,0)": {
+              "shots": 7,
+              "share": 3.5e-05,
+              "failures": 1,
+              "failure_fraction": 0.14285714285714285
+            },
+            "5+": {
+              "shots": 1442,
+              "share": 0.00721,
+              "failures": 473,
+              "failure_fraction": 0.32801664355062415
+            }
+          }
+        },
+        "0.003": {
+          "n_shots": 200000,
+          "failures": 15347,
+          "direct_ler": 0.076735,
+          "reconstructed_ler": 0.076735,
+          "bins": {
+            "(0,0)": {
+              "shots": 83990,
+              "share": 0.41995,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 24219,
+              "share": 0.121095,
+              "failures": 1654,
+              "failure_fraction": 0.06829348858334365
+            },
+            "(1,0)": {
+              "shots": 24229,
+              "share": 0.121145,
+              "failures": 1694,
+              "failure_fraction": 0.06991621610466796
+            },
+            "(0,2)": {
+              "shots": 3423,
+              "share": 0.017115,
+              "failures": 463,
+              "failure_fraction": 0.1352614665498101
+            },
+            "(1,1)": {
+              "shots": 31506,
+              "share": 0.15753,
+              "failures": 4261,
+              "failure_fraction": 0.13524408049260458
+            },
+            "(2,0)": {
+              "shots": 3548,
+              "share": 0.01774,
+              "failures": 455,
+              "failure_fraction": 0.1282412626832018
+            },
+            "(0,3)": {
+              "shots": 333,
+              "share": 0.001665,
+              "failures": 62,
+              "failure_fraction": 0.18618618618618618
+            },
+            "(1,2)": {
+              "shots": 8117,
+              "share": 0.040585,
+              "failures": 1589,
+              "failure_fraction": 0.1957619810274732
+            },
+            "(2,1)": {
+              "shots": 7956,
+              "share": 0.03978,
+              "failures": 1622,
+              "failure_fraction": 0.20387129210658622
+            },
+            "(3,0)": {
+              "shots": 318,
+              "share": 0.00159,
+              "failures": 54,
+              "failure_fraction": 0.16981132075471697
+            },
+            "(0,4)": {
+              "shots": 24,
+              "share": 0.00012,
+              "failures": 10,
+              "failure_fraction": 0.4166666666666667
+            },
+            "(1,3)": {
+              "shots": 1124,
+              "share": 0.00562,
+              "failures": 304,
+              "failure_fraction": 0.2704626334519573
+            },
+            "(2,2)": {
+              "shots": 5665,
+              "share": 0.028325,
+              "failures": 1412,
+              "failure_fraction": 0.24924977934686673
+            },
+            "(3,1)": {
+              "shots": 1170,
+              "share": 0.00585,
+              "failures": 290,
+              "failure_fraction": 0.24786324786324787
+            },
+            "(4,0)": {
+              "shots": 20,
+              "share": 0.0001,
+              "failures": 3,
+              "failure_fraction": 0.15
+            },
+            "5+": {
+              "shots": 4358,
+              "share": 0.02179,
+              "failures": 1474,
+              "failure_fraction": 0.33822854520422213
+            }
+          }
+        },
+        "0.004": {
+          "n_shots": 200000,
+          "failures": 20297,
+          "direct_ler": 0.101485,
+          "reconstructed_ler": 0.101485,
+          "bins": {
+            "(0,0)": {
+              "shots": 63200,
+              "share": 0.316,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 24168,
+              "share": 0.12084,
+              "failures": 1649,
+              "failure_fraction": 0.06823071830519696
+            },
+            "(1,0)": {
+              "shots": 24225,
+              "share": 0.121125,
+              "failures": 1664,
+              "failure_fraction": 0.06868937048503612
+            },
+            "(0,2)": {
+              "shots": 4585,
+              "share": 0.022925,
+              "failures": 626,
+              "failure_fraction": 0.1365321701199564
+            },
+            "(1,1)": {
+              "shots": 33713,
+              "share": 0.168565,
+              "failures": 4601,
+              "failure_fraction": 0.13647554355886454
+            },
+            "(2,0)": {
+              "shots": 4638,
+              "share": 0.02319,
+              "failures": 609,
+              "failure_fraction": 0.1313065976714101
+            },
+            "(0,3)": {
+              "shots": 575,
+              "share": 0.002875,
+              "failures": 112,
+              "failure_fraction": 0.19478260869565217
+            },
+            "(1,2)": {
+              "shots": 11110,
+              "share": 0.05555,
+              "failures": 2163,
+              "failure_fraction": 0.19468946894689468
+            },
+            "(2,1)": {
+              "shots": 11103,
+              "share": 0.055515,
+              "failures": 2205,
+              "failure_fraction": 0.19859497433126183
+            },
+            "(3,0)": {
+              "shots": 598,
+              "share": 0.00299,
+              "failures": 111,
+              "failure_fraction": 0.18561872909698995
+            },
+            "(0,4)": {
+              "shots": 72,
+              "share": 0.00036,
+              "failures": 20,
+              "failure_fraction": 0.2777777777777778
+            },
+            "(1,3)": {
+              "shots": 2052,
+              "share": 0.01026,
+              "failures": 580,
+              "failure_fraction": 0.2826510721247563
+            },
+            "(2,2)": {
+              "shots": 8605,
+              "share": 0.043025,
+              "failures": 2242,
+              "failure_fraction": 0.2605461940732132
+            },
+            "(3,1)": {
+              "shots": 2047,
+              "share": 0.010235,
+              "failures": 524,
+              "failure_fraction": 0.25598436736687835
+            },
+            "(4,0)": {
+              "shots": 64,
+              "share": 0.00032,
+              "failures": 13,
+              "failure_fraction": 0.203125
+            },
+            "5+": {
+              "shots": 9245,
+              "share": 0.046225,
+              "failures": 3178,
+              "failure_fraction": 0.3437533802055165
+            }
+          }
+        },
+        "0.005": {
+          "n_shots": 200000,
+          "failures": 25126,
+          "direct_ler": 0.12563,
+          "reconstructed_ler": 0.12563,
+          "bins": {
+            "(0,0)": {
+              "shots": 47479,
+              "share": 0.237395,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 22645,
+              "share": 0.113225,
+              "failures": 1567,
+              "failure_fraction": 0.06919849856480459
+            },
+            "(1,0)": {
+              "shots": 22723,
+              "share": 0.113615,
+              "failures": 1583,
+              "failure_fraction": 0.0696650970382432
+            },
+            "(0,2)": {
+              "shots": 5383,
+              "share": 0.026915,
+              "failures": 731,
+              "failure_fraction": 0.1357978822218094
+            },
+            "(1,1)": {
+              "shots": 33494,
+              "share": 0.16747,
+              "failures": 4531,
+              "failure_fraction": 0.1352779602316833
+            },
+            "(2,0)": {
+              "shots": 5384,
+              "share": 0.02692,
+              "failures": 701,
+              "failure_fraction": 0.13020059435364043
+            },
+            "(0,3)": {
+              "shots": 876,
+              "share": 0.00438,
+              "failures": 172,
+              "failure_fraction": 0.1963470319634703
+            },
+            "(1,2)": {
+              "shots": 13780,
+              "share": 0.0689,
+              "failures": 2688,
+              "failure_fraction": 0.19506531204644412
+            },
+            "(2,1)": {
+              "shots": 13651,
+              "share": 0.068255,
+              "failures": 2702,
+              "failure_fraction": 0.1979342172734598
+            },
+            "(3,0)": {
+              "shots": 854,
+              "share": 0.00427,
+              "failures": 167,
+              "failure_fraction": 0.1955503512880562
+            },
+            "(0,4)": {
+              "shots": 90,
+              "share": 0.00045,
+              "failures": 25,
+              "failure_fraction": 0.2777777777777778
+            },
+            "(1,3)": {
+              "shots": 3008,
+              "share": 0.01504,
+              "failures": 813,
+              "failure_fraction": 0.2702792553191489
+            },
+            "(2,2)": {
+              "shots": 11308,
+              "share": 0.05654,
+              "failures": 2924,
+              "failure_fraction": 0.25857799787760877
+            },
+            "(3,1)": {
+              "shots": 3022,
+              "share": 0.01511,
+              "failures": 782,
+              "failure_fraction": 0.25876902713434813
+            },
+            "(4,0)": {
+              "shots": 111,
+              "share": 0.000555,
+              "failures": 22,
+              "failure_fraction": 0.1981981981981982
+            },
+            "5+": {
+              "shots": 16192,
+              "share": 0.08096,
+              "failures": 5718,
+              "failure_fraction": 0.35313735177865613
+            }
+          }
+        }
+      }
+    },
+    "144_12_12_ldpc": {
+      "code_name": "144_12_12_ldpc",
+      "n": 144,
+      "curriculum_error_rate": 0.001,
+      "p_prior": 0.0006666666666666666,
+      "per_p": {
+        "0.001": {
+          "n_shots": 200000,
+          "failures": 0,
+          "direct_ler": 0.0,
+          "reconstructed_ler": 0.0,
+          "bins": {
+            "(0,0)": {
+              "shots": 173129,
+              "share": 0.865645,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 8312,
+              "share": 0.04156,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,0)": {
+              "shots": 8439,
+              "share": 0.042195,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,2)": {
+              "shots": 203,
+              "share": 0.001015,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,1)": {
+              "shots": 8646,
+              "share": 0.04323,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,0)": {
+              "shots": 179,
+              "share": 0.000895,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,3)": {
+              "shots": 2,
+              "share": 1e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,2)": {
+              "shots": 424,
+              "share": 0.00212,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,1)": {
+              "shots": 390,
+              "share": 0.00195,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,0)": {
+              "shots": 3,
+              "share": 1.5e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,4)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "(1,3)": {
+              "shots": 7,
+              "share": 3.5e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,2)": {
+              "shots": 231,
+              "share": 0.001155,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,1)": {
+              "shots": 5,
+              "share": 2.5e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(4,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "5+": {
+              "shots": 30,
+              "share": 0.00015,
+              "failures": 0,
+              "failure_fraction": 0.0
+            }
+          }
+        },
+        "0.002": {
+          "n_shots": 200000,
+          "failures": 0,
+          "direct_ler": 0.0,
+          "reconstructed_ler": 0.0,
+          "bins": {
+            "(0,0)": {
+              "shots": 149695,
+              "share": 0.748475,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 14565,
+              "share": 0.072825,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,0)": {
+              "shots": 14486,
+              "share": 0.07243,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,2)": {
+              "shots": 660,
+              "share": 0.0033,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,1)": {
+              "shots": 15847,
+              "share": 0.079235,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,0)": {
+              "shots": 650,
+              "share": 0.00325,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,3)": {
+              "shots": 16,
+              "share": 8e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,2)": {
+              "shots": 1516,
+              "share": 0.00758,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,1)": {
+              "shots": 1388,
+              "share": 0.00694,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,0)": {
+              "shots": 21,
+              "share": 0.000105,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,4)": {
+              "shots": 1,
+              "share": 5e-06,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,3)": {
+              "shots": 65,
+              "share": 0.000325,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,2)": {
+              "shots": 838,
+              "share": 0.00419,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,1)": {
+              "shots": 68,
+              "share": 0.00034,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(4,0)": {
+              "shots": 0,
+              "share": 0.0,
+              "failures": 0,
+              "failure_fraction": null
+            },
+            "5+": {
+              "shots": 184,
+              "share": 0.00092,
+              "failures": 0,
+              "failure_fraction": 0.0
+            }
+          }
+        },
+        "0.003": {
+          "n_shots": 200000,
+          "failures": 1,
+          "direct_ler": 5e-06,
+          "reconstructed_ler": 5e-06,
+          "bins": {
+            "(0,0)": {
+              "shots": 129450,
+              "share": 0.64725,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 18926,
+              "share": 0.09463,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,0)": {
+              "shots": 18733,
+              "share": 0.093665,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,2)": {
+              "shots": 1351,
+              "share": 0.006755,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,1)": {
+              "shots": 21464,
+              "share": 0.10732,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,0)": {
+              "shots": 1308,
+              "share": 0.00654,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,3)": {
+              "shots": 58,
+              "share": 0.00029,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,2)": {
+              "shots": 3030,
+              "share": 0.01515,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,1)": {
+              "shots": 2873,
+              "share": 0.014365,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,0)": {
+              "shots": 51,
+              "share": 0.000255,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,4)": {
+              "shots": 2,
+              "share": 1e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,3)": {
+              "shots": 211,
+              "share": 0.001055,
+              "failures": 1,
+              "failure_fraction": 0.004739336492890996
+            },
+            "(2,2)": {
+              "shots": 1718,
+              "share": 0.00859,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,1)": {
+              "shots": 198,
+              "share": 0.00099,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(4,0)": {
+              "shots": 2,
+              "share": 1e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "5+": {
+              "shots": 625,
+              "share": 0.003125,
+              "failures": 0,
+              "failure_fraction": 0.0
+            }
+          }
+        },
+        "0.004": {
+          "n_shots": 200000,
+          "failures": 7,
+          "direct_ler": 3.5e-05,
+          "reconstructed_ler": 3.5e-05,
+          "bins": {
+            "(0,0)": {
+              "shots": 112293,
+              "share": 0.561465,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 21836,
+              "share": 0.10918,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,0)": {
+              "shots": 21505,
+              "share": 0.107525,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,2)": {
+              "shots": 2090,
+              "share": 0.01045,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,1)": {
+              "shots": 25653,
+              "share": 0.128265,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,0)": {
+              "shots": 2032,
+              "share": 0.01016,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,3)": {
+              "shots": 125,
+              "share": 0.000625,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,2)": {
+              "shots": 4608,
+              "share": 0.02304,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,1)": {
+              "shots": 4485,
+              "share": 0.022425,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,0)": {
+              "shots": 128,
+              "share": 0.00064,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,4)": {
+              "shots": 4,
+              "share": 2e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,3)": {
+              "shots": 447,
+              "share": 0.002235,
+              "failures": 2,
+              "failure_fraction": 0.0044742729306487695
+            },
+            "(2,2)": {
+              "shots": 2937,
+              "share": 0.014685,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,1)": {
+              "shots": 429,
+              "share": 0.002145,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(4,0)": {
+              "shots": 5,
+              "share": 2.5e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "5+": {
+              "shots": 1423,
+              "share": 0.007115,
+              "failures": 5,
+              "failure_fraction": 0.0035137034434293743
+            }
+          }
+        },
+        "0.005": {
+          "n_shots": 200000,
+          "failures": 16,
+          "direct_ler": 8e-05,
+          "reconstructed_ler": 7.999999999999999e-05,
+          "bins": {
+            "(0,0)": {
+              "shots": 97352,
+              "share": 0.48676,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,1)": {
+              "shots": 23491,
+              "share": 0.117455,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,0)": {
+              "shots": 23194,
+              "share": 0.11597,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,2)": {
+              "shots": 2849,
+              "share": 0.014245,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,1)": {
+              "shots": 28934,
+              "share": 0.14467,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,0)": {
+              "shots": 2834,
+              "share": 0.01417,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,3)": {
+              "shots": 215,
+              "share": 0.001075,
+              "failures": 1,
+              "failure_fraction": 0.004651162790697674
+            },
+            "(1,2)": {
+              "shots": 6324,
+              "share": 0.03162,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(2,1)": {
+              "shots": 6189,
+              "share": 0.030945,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,0)": {
+              "shots": 232,
+              "share": 0.00116,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(0,4)": {
+              "shots": 14,
+              "share": 7e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(1,3)": {
+              "shots": 755,
+              "share": 0.003775,
+              "failures": 2,
+              "failure_fraction": 0.0026490066225165563
+            },
+            "(2,2)": {
+              "shots": 4266,
+              "share": 0.02133,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "(3,1)": {
+              "shots": 711,
+              "share": 0.003555,
+              "failures": 2,
+              "failure_fraction": 0.0028129395218002813
+            },
+            "(4,0)": {
+              "shots": 8,
+              "share": 4e-05,
+              "failures": 0,
+              "failure_fraction": 0.0
+            },
+            "5+": {
+              "shots": 2632,
+              "share": 0.01316,
+              "failures": 11,
+              "failure_fraction": 0.004179331306990881
+            }
+          }
+        }
+      }
+    }
+  }
+}
