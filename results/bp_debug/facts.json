@@ -1,0 +1,185 @@
+{
+ "d7_surface": {
+  "n": 49,
+  "d": 7,
+  "k": 1,
+  "hx": [
+   24,
+   49
+  ],
+  "hz": [
+   24,
+   49
+  ],
+  "curriculum_rate": 0.002938775510204082,
+  "prior_used": 0.001959183673469388,
+  "dens": {
+   "1": {
+    "x_flips": 1,
+    "z_flips": 1,
+    "touched": 1.98,
+    "frac_touched": 0.0404
+   },
+   "2": {
+    "x_flips": 2,
+    "z_flips": 2,
+    "touched": 3.92,
+    "frac_touched": 0.08
+   },
+   "3": {
+    "x_flips": 3,
+    "z_flips": 3,
+    "touched": 5.82,
+    "frac_touched": 0.1187
+   },
+   "4": {
+    "x_flips": 4,
+    "z_flips": 4,
+    "touched": 7.67,
+    "frac_touched": 0.1566
+   },
+   "5": {
+    "x_flips": 5,
+    "z_flips": 5,
+    "touched": 9.49,
+    "frac_touched": 0.1937
+   }
+  },
+  "eval_rates": [
+   0.001,
+   0.002,
+   0.003,
+   0.004,
+   0.005
+  ],
+  "exp_x_flips_at_p": {
+   "0.001": 0.033,
+   "0.002": 0.065,
+   "0.003": 0.098,
+   "0.004": 0.131,
+   "0.005": 0.163
+  }
+ },
+ "288_8_12_tile": {
+  "n": 288,
+  "d": 12,
+  "k": 8,
+  "hx": [
+   140,
+   288
+  ],
+  "hz": [
+   140,
+   288
+  ],
+  "curriculum_rate": 0.0005,
+  "prior_used": 0.0003333333333333333,
+  "dens": {
+   "1": {
+    "x_flips": 1,
+    "z_flips": 1,
+    "touched": 2.0,
+    "frac_touched": 0.0069
+   },
+   "2": {
+    "x_flips": 2,
+    "z_flips": 2,
+    "touched": 3.99,
+    "frac_touched": 0.0138
+   },
+   "3": {
+    "x_flips": 3,
+    "z_flips": 3,
+    "touched": 5.97,
+    "frac_touched": 0.0207
+   },
+   "4": {
+    "x_flips": 4,
+    "z_flips": 4,
+    "touched": 7.94,
+    "frac_touched": 0.0276
+   },
+   "5": {
+    "x_flips": 5,
+    "z_flips": 5,
+    "touched": 9.91,
+    "frac_touched": 0.0344
+   }
+  },
+  "eval_rates": [
+   0.001,
+   0.002,
+   0.003,
+   0.004,
+   0.005
+  ],
+  "exp_x_flips_at_p": {
+   "0.001": 0.192,
+   "0.002": 0.384,
+   "0.003": 0.576,
+   "0.004": 0.768,
+   "0.005": 0.96
+  }
+ },
+ "144_12_12_ldpc": {
+  "n": 144,
+  "d": 12,
+  "k": 12,
+  "hx": [
+   72,
+   144
+  ],
+  "hz": [
+   72,
+   144
+  ],
+  "curriculum_rate": 0.001,
+  "prior_used": 0.0006666666666666666,
+  "dens": {
+   "1": {
+    "x_flips": 1,
+    "z_flips": 1,
+    "touched": 1.99,
+    "frac_touched": 0.0138
+   },
+   "2": {
+    "x_flips": 2,
+    "z_flips": 2,
+    "touched": 3.97,
+    "frac_touched": 0.0276
+   },
+   "3": {
+    "x_flips": 3,
+    "z_flips": 3,
+    "touched": 5.94,
+    "frac_touched": 0.0412
+   },
+   "4": {
+    "x_flips": 4,
+    "z_flips": 4,
+    "touched": 7.89,
+    "frac_touched": 0.0548
+   },
+   "5": {
+    "x_flips": 5,
+    "z_flips": 5,
+    "touched": 9.83,
+    "frac_touched": 0.0682
+   }
+  },
+  "eval_rates": [
+   0.001,
+   0.002,
+   0.003,
+   0.004,
+   0.005
+  ],
+  "exp_x_flips_at_p": {
+   "0.001": 0.096,
+   "0.002": 0.192,
+   "0.003": 0.288,
+   "0.004": 0.384,
+   "0.005": 0.48
+  }
+ }
+}
