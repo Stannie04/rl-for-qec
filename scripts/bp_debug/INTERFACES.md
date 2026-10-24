@@ -6,7 +6,7 @@ or existing `tests/`.** Run everything from the repo root as `python -m scripts.
 Python: the default `python` (conda base; has ldpc 2.4.1, pymatching, torch). No new dependencies.
 
 ## Facts about the existing code (read these before coding)
-- Config: `ConfigParser("configs", "bp", code_name, None)` (agent name `bp` exists in model_config.yml). `noise_model` is `"depolarizing"`.
+- Config: `ConfigParser("configs", "sac", code_name, None)` (model_config.yml only has `sac`, `moe`, `encoder`; `"bp"` is an inference agent name, not a model-config key). `noise_model` is `"depolarizing"`.
 - `QECEnv(config, shots)` (src/environment/env.py) holds `env.code` (QECCode, src/environment/code.py) with `H.x`, `H.z` (torch tensors), `n_data`, `logical`.
 - Syndromes: `z_syndrome = H.z @ x_errors`, `x_syndrome = H.x @ z_errors` (mod 2). X errors are decoded with `H.z`, Z errors with `H.x`.
 - Shots are arrays of shape `(N, 2, n)`: `[:,0,:]` = X error pattern, `[:,1,:]` = Z error pattern (a Y error is 1 in both). `n == n_data`.
@@ -27,7 +27,7 @@ Python: the default `python` (conda base; has ldpc 2.4.1, pymatching, torch). No
 
 ## `scripts/bp_debug/common.py` (card BD1, everyone else imports it)
 ```python
-def load_config(code_name: str, agent_name: str = "bp", noise_model: str = "depolarizing") -> ConfigParser
+def load_config(code_name: str, agent_name: str = "sac", noise_model: str = "depolarizing") -> ConfigParser
 def make_env(config, shots=None) -> QECEnv
 def uniform_shots(config, n_per_weight: int, max_weight: int = 5, seed: int = 0) -> np.ndarray   # wraps create_dataset_from_uniform_shots, seeded
 def random_shots(config, n: int, p: float, seed: int = 0) -> np.ndarray                          # wraps create_dataset_from_random_shots, seeded
