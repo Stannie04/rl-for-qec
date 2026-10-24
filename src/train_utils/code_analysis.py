@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from src.train_utils.datasets import load_shots, create_dataset_from_all_permutations, create_dataset_from_random_shots
-from src.train_utils.plotting import plot_jaccard_heatmap, plot_oracle_mistakes
+from src.train_utils.plotting import plot_oracle_mistakes
 from PIL import Image
+import os
 
 def probabilities_of_k_errors_per_shot(code):
     total_number_qubits = code.n_data
@@ -87,23 +88,14 @@ def compute_overlap_stats(
     return overlap_mask
 
 
-def analyze_datasets(config, agents):
+def mistake_overlap_between_agents(config, agents):
     all_mistakes = {}
-    for agent_name in agents:
-        mistakes = load_shots(
-            config,
-            dataset_type="mistakes",
-            noise_model="bit_flip",
-            agent_name=agent_name,
-        )
+    for agent_name in agents.keys():
+        mistakes = load_shots(config,dataset_type="mistakes",agent_name=agent_name)
         all_mistakes[agent_name] = mistakes
 
     compute_all_mistake_overlaps(config, all_mistakes)
-
-    # agent_names, jaccard = compute_jaccard_matrix(all_mistakes)
-    # plot_jaccard_heatmap(agent_names, jaccard)
-
-    plot_oracle_mistakes(all_mistakes)
+    plot_oracle_mistakes(config, all_mistakes, agents)
 
 
 def compute_all_mistake_overlaps(config, all_mistakes):
@@ -156,35 +148,7 @@ def compute_all_mistake_overlaps(config, all_mistakes):
             compute_overlap_stats(mistakes, other_mistakes, error_counts, other_agent_name=other_agent_name)
 
 
-def compute_jaccard_matrix(all_mistakes):
-
-    def mistakes_to_set(mistakes):
-        mistakes = np.ascontiguousarray(mistakes)
-        flat = mistakes.reshape(mistakes.shape[0], -1)
-        return {row.tobytes() for row in flat}
-
-
-    agent_names = list(all_mistakes.keys())
-    mistake_sets = {
-        name: mistakes_to_set(mistakes)
-        for name, mistakes in all_mistakes.items()
-    }
-
-    n = len(agent_names)
-    jaccard = np.zeros((n, n))
-
-    for i, a in enumerate(agent_names):
-        for j, b in enumerate(agent_names):
-
-            inter = len(mistake_sets[a] & mistake_sets[b])
-            union = len(mistake_sets[a] | mistake_sets[b])
-
-            jaccard[i, j] = inter / union if union else 1.0
-
-    return agent_names, jaccard
-
-
-def get_nonzero_overlap_distribution(config, shots):
+def _get_nonzero_overlap_distribution(config, shots):
 
     env = QECEnv(config, shots)
 
@@ -198,45 +162,31 @@ def get_nonzero_overlap_distribution(config, shots):
 
     all_overlaps = list(zip(num_one.tolist(), num_two.tolist()))
     overlap_counts = Counter(all_overlaps)
-
-    print("\nOverlap distribution for uniform shots:")
-    for overlap, count in sorted(overlap_counts.items()):
-        print(f"  Overlap {overlap}: {count} samples")
+    #
+    # print("\nOverlap distribution for uniform shots:")
+    # for overlap, count in sorted(overlap_counts.items()):
+    #     print(f"  Overlap {overlap}: {count} samples")
 
     return overlap_counts
 
 
 def get_mistake_distribution(config, agents):
-    shots = load_shots(config, dataset_type="uniform", noise_model="bit_flip")
-    all_overlap_counts = get_nonzero_overlap_distribution(config, shots)
-
-    # all_shots = create_dataset_from_all_permutations(config, num_errors=[1,2,3,4])
-    # all_shot_counts = get_nonzero_overlap_distribution(config, all_shots)
-
+    shots = load_shots(config, dataset_type="uniform")
+    all_overlap_counts = _get_nonzero_overlap_distribution(config, shots)
 
     env_tmp = QECEnv(config)
-    H_z = env_tmp.code.H.z.detach().cpu().numpy()
-    H_z_T = H_z.T
+    H_z_T = env_tmp.code.H.z_T.detach().cpu().numpy()
 
     all_accuracies = {}
 
-    for agent_name in agents:
-        shots = load_shots(config,dataset_type="mistakes",noise_model="bit_flip",agent_name=agent_name)
+    for agent_name, pretty_name in agents.items():
+        shots = load_shots(config,dataset_type="mistakes",agent_name=agent_name)
 
         error_matrix = np.asarray([shot[0] for shot in shots], dtype=np.int8)
-
         overlaps_mat = error_matrix @ H_z_T
 
-        n_one = np.sum(overlaps_mat == 1, axis=1)
-        n_two = np.sum(overlaps_mat == 2, axis=1)
-
-        all_mistake_overlaps = list(zip(n_one, n_two))
-
+        all_mistake_overlaps = list(zip(np.sum(overlaps_mat == 1, axis=1), np.sum(overlaps_mat == 2, axis=1)))
         mistake_counts = Counter(all_mistake_overlaps)
-
-        print("\nOverlap distribution for mistake shots:")
-        for overlap, count in sorted(mistake_counts.items()):
-            print(f"  Overlap {overlap}: {count} samples")
 
         representative_shots = {}
         seen = set()
@@ -253,22 +203,10 @@ def get_mistake_distribution(config, agents):
             all_overlaps_count = all_overlap_counts[overlap]
 
             env_tmp.reset_with_error_pattern(shot[0], shot[1])
-            img = env_tmp.code.render_subgraph(
-                np.array(np.where(shot[0] == 1)[0]),
-                overlap,
-                mistake_count,
-                all_overlaps_count,
-                with_title=True
-            )
-            images.append((overlap, img))
+            img = env_tmp.code.render(mode="subgraph", title=f"Overlap {overlap}\nMistakes: {mistake_count}/{all_overlaps_count} ({100 * mistake_count / all_overlaps_count:.2f}%)", return_fig=True)
+            img_untitled = env_tmp.code.render(mode="subgraph", title=None, return_fig=True)
 
-            img_untitled = env_tmp.code.render_subgraph(
-                np.array(np.where(shot[0] == 1)[0]),
-                overlap,
-                mistake_count,
-                all_overlaps_count,
-                with_title=False
-            )
+            images.append((overlap, img))
             images_untitled.append((overlap, img_untitled))
 
         if not images:
@@ -284,36 +222,32 @@ def get_mistake_distribution(config, agents):
         cols = 4
         rows = math.ceil(len(images) / cols)
 
-        canvas = Image.new(
-            "RGB",
-            (cols * image_size[0], rows * image_size[1]),
-            "white",
-        )
+        canvas = Image.new("RGB",(cols * image_size[0], rows * image_size[1]),"white",)
 
         for i, (_, img) in enumerate(images):
             x = (i % cols) * image_size[0]
             y = (i // cols) * image_size[1]
             canvas.paste(img, (x, y))
 
-        canvas.save(f"results/mistake_overlap_distribution_{agent_name}.png")
+        os.makedirs(f"results/mistake_distributions/{config.code_name}/{config.noise_model}", exist_ok=True)
+        canvas.save(f"results/mistake_distributions/{config.code_name}/{config.noise_model}/{agent_name}.png")
         # canvas.show()
 
-        all_accuracies[agent_name] = {pattern: 1-(count / all_overlap_counts[pattern]) for pattern, count in mistake_counts.items()}
+        all_accuracies[pretty_name] = {pattern: 1-(count / all_overlap_counts[pattern]) for pattern, count in mistake_counts.items()}
 
     # print all_accuracies as a table
-    print("\nMistake accuracies by overlap pattern:")
+    print("\nAccuracy per overlap pattern:")
     print("-" * 95)
     header = ["Overlap"] + list(all_accuracies.keys())
     header_format = " ".join(["{:<15}"] * len(header))
     print(header_format.format(*header))
     print("-" * 95)
     for pattern in sorted(all_overlap_counts.keys()):
-        if pattern in [(3,3), (4,4), (5,2), (6,3), (8,2), (9,0), (10,1), (12,0)]:
-            row = [f"{pattern}"]
-            for agent_name in all_accuracies.keys():
-                accuracy = all_accuracies[agent_name].get(pattern, 1.0)
-                row.append(f"{accuracy:.3%}")
-            print(header_format.format(*row))
+        row = [f"{pattern}"]
+        for pretty_name in all_accuracies.keys():
+            accuracy = all_accuracies[pretty_name].get(pattern, 1.0)
+            row.append(f"{accuracy:.3%}")
+        print(header_format.format(*row))
 
 
 def get_pattern_frequency(config):
@@ -339,18 +273,19 @@ def get_pattern_frequency(config):
     irrelevant_sum = 0
     solvable_sum = 0
     for overlap, count in sorted(overlap_counts.items()):
-        if overlap in [(3,3), (4,4), (5,2), (6,3), (8,2), (9,0), (10,1), (12,0)]:
-            print(f"  Overlap {overlap}: {count} samples, Frequency: {count / num_samples:.8}, Errors: {count/num_errors:.6}")
-        elif overlap in [(3,0), (4,1), (6,0), (7,1)]:
-            solvable_sum += count
-        elif overlap != (0,0):
-            irrelevant_sum += count
-    print(f"  Solvable: {solvable_sum} samples, Frequency: {solvable_sum / num_samples:.6%}, Errors: {solvable_sum/num_errors:.4%}")
-    print(f"  Higher weight: {irrelevant_sum} samples, Frequency: {irrelevant_sum / num_samples:.6%}, Errors: {irrelevant_sum/num_errors:.4%}")
+        print(f"  Overlap {overlap}: {count} samples, Frequency: {count / num_samples:.8}, Errors: {count/num_errors:.6}")
+        # if overlap in [(3,3), (4,4), (5,2), (6,3), (8,2), (9,0), (10,1), (12,0)]:
+        #     print(f"  Overlap {overlap}: {count} samples, Frequency: {count / num_samples:.8}, Errors: {count/num_errors:.6}")
+    #     elif overlap in [(3,0), (4,1), (6,0), (7,1)]:
+    #         solvable_sum += count
+    #     elif overlap != (0,0):
+    #         irrelevant_sum += count
+    # print(f"  Solvable: {solvable_sum} samples, Frequency: {solvable_sum / num_samples:.6%}, Errors: {solvable_sum/num_errors:.4%}")
+    # print(f"  Higher weight: {irrelevant_sum} samples, Frequency: {irrelevant_sum / num_samples:.6%}, Errors: {irrelevant_sum/num_errors:.4%}")
 
 
 def get_absolute_error_rate(config):
-    mistakes = load_shots(config, dataset_type="mistakes", noise_model="bit_flip", agent_name="bp")
+    mistakes = load_shots(config, dataset_type="mistakes", agent_name="bp")
 
     mistake_distribution = {}
     for shot in tqdm(mistakes, leave=False):
@@ -380,13 +315,17 @@ def get_absolute_error_rate(config):
         print(f"p = {error_rate}: LER = {total_probability:e}, Depolarizing LER = {depolarizing_probability:e}")
 
 
-
 def full_analysis(config):
-    env = QECEnv(config)
-    code = env.code
-    agents = ["bp", "sl_nbp_big", "sl_tanner_big", "sac_nbp_big",  "sac_tanner_big"]
+
+    agents = {
+        "bp": "BP",
+        "bp_osd": "BP+OSD",
+        "bp_lsd": "BP+LSD",
+        "rl_nbp": "SAC+NBP",
+    }
+
     print(f"Code Name: {config.code_name}\n")
     # probabilities_of_k_errors_per_shot(code)
     # get_pattern_frequency(config)
-    analyze_datasets(config, agents)
-    # get_mistake_distribution(config, agents)
+    mistake_overlap_between_agents(config, agents)
+    get_mistake_distribution(config, agents)
