@@ -151,6 +151,7 @@ def sl_train_loop(config, router, train, test):
 
     router.save(f"checkpoints/evaluate_cps/moe_{config.code_name}_router.pt")
 
+
 def get_decoders(config, env):
     expert_list, inference_list = [], []
     for decoder_name in config.moe_experts:

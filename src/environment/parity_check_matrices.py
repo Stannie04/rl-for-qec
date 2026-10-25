@@ -87,7 +87,7 @@ class ParityCheckMatrices:
                 row[(r + 1) * d] = 1
                 H_x.append(row)
 
-            if r % 2 == 0:
+            if (r + d - 1) % 2 == 0:
                 row = np.zeros(n, dtype=np.uint8)
                 row[r * d + (d - 1)] = 1
                 row[(r + 1) * d + (d - 1)] = 1
@@ -101,7 +101,7 @@ class ParityCheckMatrices:
                 row[c + 1] = 1
                 H_z.append(row)
 
-            if c % 2 == 1:
+            if (d - 1 + c) % 2 == 1:
                 row = np.zeros(n, dtype=np.uint8)
                 row[(d - 1) * d + c] = 1
                 row[(d - 1) * d + c + 1] = 1
