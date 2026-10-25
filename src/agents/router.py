@@ -24,7 +24,7 @@ class RouterNetwork(nn.Module):
             classification_layers.append(nn.Linear(prev_dim, hidden_dim))
             classification_layers.append(nn.ReLU())
             prev_dim = hidden_dim
-        classification_layers.append(nn.Linear(prev_dim, len(config.moe_experts)))
+        classification_layers.append(nn.Linear(prev_dim, 1))
         self.action_head = nn.Sequential(*classification_layers)
 
         self = self.to(self.device)

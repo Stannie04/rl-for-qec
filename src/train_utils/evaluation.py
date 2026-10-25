@@ -123,4 +123,4 @@ def generalizability_evaluation(config, agents):
 
 def post_train_evaluation(config):
     # Evaluate the agent at the end of training and print results to console.
-    per_to_ler_agents(config, config.agents_to_evaluate, plot_file=f"results/per_to_ler/{config.code_name}_bptest.png")
+    per_to_ler_agents(config, config.agents_to_evaluate, plot_file=f"results/per_to_ler/{config.code_name}.png")
