@@ -15,7 +15,7 @@ build_tile_code = tile_code.build_tile_code
 
 ORACLE = Path(__file__).with_name("test_data") / "tile_288_8_12_oracle.npz"
 
-L, B = 12, 3
+L, M, B = 12, 12, 3
 X_TILE = {"L": [[1, 0], [2, 0], [0, 2]], "R": [[2, 1], [2, 2], [0, 0]]}  # f = x + x^2 + y^2
 Z_TILE = {"L": [[2, 2], [0, 1], [0, 0]], "R": [[1, 2], [0, 2], [2, 0]]}  # g, f duals
 
@@ -48,7 +48,7 @@ def row_set(H):
 
 
 def test_matches_oracle_as_row_sets():
-    H_x, H_z = build_tile_code(L, X_TILE, Z_TILE)
+    H_x, H_z = build_tile_code(L, M, X_TILE, Z_TILE)
     oracle = np.load(ORACLE)
     assert H_x.dtype == np.uint8 and H_z.dtype == np.uint8
     assert row_set(H_x) == row_set(oracle["H_x"])
@@ -56,7 +56,7 @@ def test_matches_oracle_as_row_sets():
 
 
 def test_shapes_ranks_commutation_and_k():
-    H_x, H_z = build_tile_code(L, X_TILE, Z_TILE)
+    H_x, H_z = build_tile_code(L, M, X_TILE, Z_TILE)
     assert H_x.shape == (140, 288)
     assert H_z.shape == (140, 288)
     assert gf2_rank(H_x) == 140
@@ -66,14 +66,14 @@ def test_shapes_ranks_commutation_and_k():
 
 
 def test_hand_computed_rows_at_origin():
-    H_x, H_z = build_tile_code(L, X_TILE, Z_TILE)
+    H_x, H_z = build_tile_code(L, M, X_TILE, Z_TILE)
     # Row order follows the (u, v) sweep: (0, 0) is X row 2 and Z row 20.
     assert set(np.flatnonzero(H_x[2]).tolist()) == {12, 24, 2, 169, 170, 144}
     assert set(np.flatnonzero(H_z[20]).tolist()) == {26, 1, 0, 158, 146, 168}
 
 
 def test_bulk_and_boundary_weights_and_qubit_coverage():
-    H_x, H_z = build_tile_code(L, X_TILE, Z_TILE)
+    H_x, H_z = build_tile_code(L, M, X_TILE, Z_TILE)
     w_x, w_z = H_x.sum(1), H_z.sum(1)
 
     # X rows: 14 per u (v = -2, -1 boundary, then 10 bulk v = 0..9, then 2 boundary).
@@ -92,14 +92,14 @@ def test_bulk_and_boundary_weights_and_qubit_coverage():
 
 
 def test_generality_l6():
-    H_x, H_z = build_tile_code(6, X_TILE, Z_TILE)
+    H_x, H_z = build_tile_code(6, 6, X_TILE, Z_TILE)
     assert H_x.shape[1] == H_z.shape[1] == 2 * 36
     assert int((H_x @ H_z.T % 2).sum()) == 0
 
 
 def test_default_box_equals_explicit_box():
     assert np.array_equal(
-        build_tile_code(L, X_TILE, Z_TILE)[0], build_tile_code(L, X_TILE, Z_TILE, box=B)[0]
+        build_tile_code(L, M, X_TILE, Z_TILE)[0], build_tile_code(L, M, X_TILE, Z_TILE, box=B)[0]
     )
 
 
