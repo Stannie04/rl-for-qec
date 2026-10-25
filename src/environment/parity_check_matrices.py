@@ -48,14 +48,13 @@ class ParityCheckMatrices:
         return torch.tensor(H_x, dtype=torch.long, device=self.device),  torch.tensor(H_z, dtype=torch.long, device=self.device)
 
 
-    def _init_parity_check_matrices_tile(self, L, code_params):
-        H_x, H_z = build_tile_code(L, code_params["x_tile"], code_params["z_tile"])
+    def _init_parity_check_matrices_tile(self, L, M, code_params):
+        H_x, H_z = build_tile_code(L, M, code_params["x_tile"], code_params["z_tile"])
         return torch.tensor(H_x, dtype=torch.long, device=self.device), torch.tensor(H_z, dtype=torch.long, device=self.device)
 
 
     def _init_parity_check_matrices_surface(self, d):
-        # Sanity check.
-        assert d >= 3 and d % 2 == 1
+        assert d >= 3
         n = d * d
 
         H_x = []
@@ -133,33 +132,27 @@ import numpy as np
 BLOCKS = ("L", "R")  # block index t = 0 -> "L", t = 1 -> "R"
 
 
-def _tile_row(tile, u, v, L):
-    """Qubit indices of the tile placed at (u, v); out-of-grid offsets dropped."""
+def _tile_row(tile, u, v, L, M):
     cols = []
     for t, block in enumerate(BLOCKS):
         for dx, dy in tile[block]:
             i, j = u + dx, v + dy
-            if 0 <= i < L and 0 <= j < L:
-                cols.append(t * L * L + i * L + j)
+            if 0 <= i < L and 0 <= j < M:
+                cols.append(t * L * M + i * M + j)
     return cols
 
+def _in_bulk(u, v, L, M, B):
+    return 0 <= u <= L - B and 0 <= v <= M - B
 
-def _in_bulk(u, v, L, B):
-    return 0 <= u <= L - B and 0 <= v <= L - B
-
-
-def _used_x(u, v, L, B):
-    """X checks: bulk positions plus X boundary positions (u in bulk, bad v)."""
-    if _in_bulk(u, v, L, B):
+def _used_x(u, v, L, M, B):
+    if _in_bulk(u, v, L, M, B):
         return True
-    return 0 <= u <= L - B and (-(B - 1) <= v <= -1 or L - B + 1 <= v <= L - 1)
+    return 0 <= u <= L - B and (-(B - 1) <= v <= -1 or M - B + 1 <= v <= M - 1)
 
-
-def _used_z(u, v, L, B):
-    """Z checks: bulk positions plus Z boundary positions (v in bulk, bad u)."""
-    if _in_bulk(u, v, L, B):
+def _used_z(u, v, L, M, B):
+    if _in_bulk(u, v, L, M, B):
         return True
-    return 0 <= v <= L - B and (-(B - 1) <= u <= -1 or L - B + 1 <= u <= L - 1)
+    return 0 <= v <= M - B and (-(B - 1) <= u <= -1 or L - B + 1 <= u <= L - 1)
 
 
 def _dense(rows, n):
@@ -169,7 +162,7 @@ def _dense(rows, n):
     return H
 
 
-def build_tile_code(L, x_tile, z_tile, box=None):
+def build_tile_code(L, M, x_tile, z_tile, box=None):
     """Build the CSS parity check matrices (H_x, H_z) of a planar tile code.
 
     Returns two uint8 numpy arrays with n = 2 * L * L columns.  `box` is the tile
@@ -178,17 +171,16 @@ def build_tile_code(L, x_tile, z_tile, box=None):
     if box is None:
         box = 1 + max(max(dx, dy) for tile in (x_tile, z_tile) for block in BLOCKS for dx, dy in tile[block])
     B = box
-    n = 2 * L * L
-
     x_rows, z_rows = [], []
+    n = 2 * L * M
     for u in range(-(B - 1), L):
-        for v in range(-(B - 1), L):
-            if _used_x(u, v, L, B):
-                cols = _tile_row(x_tile, u, v, L)
+        for v in range(-(B - 1), M):
+            if _used_x(u, v, L, M, B):
+                cols = _tile_row(x_tile, u, v, L, M)
                 if cols:
                     x_rows.append(cols)
-            if _used_z(u, v, L, B):
-                cols = _tile_row(z_tile, u, v, L)
+            if _used_z(u, v, L, M, B):
+                cols = _tile_row(z_tile, u, v, L, M)
                 if cols:
                     z_rows.append(cols)
 
