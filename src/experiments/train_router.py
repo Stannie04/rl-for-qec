@@ -1,5 +1,6 @@
 import time
 from tqdm import tqdm
+import numpy as np
 import os
 import torch
 from torch.utils.data import Dataset, random_split
@@ -92,43 +93,65 @@ def moe_rl_train_loop(config, env, agent, expert_list, inference_list, train=Tru
 def sl_evaluate(config, router, test, num_experts, epoch, train_loss):
     router.eval()
 
-    num_test_samples = len(test.dataset)
-    correct = torch.zeros(num_experts, device=config.device)
-    tp = torch.zeros(num_experts, device=config.device)
-    fp = torch.zeros(num_experts, device=config.device)
-    fn = torch.zeros(num_experts, device=config.device)
+    correct = torch.zeros((), device=config.device)
+    tp = torch.zeros((), device=config.device)
+    fp = torch.zeros((), device=config.device)
+    fn = torch.zeros((), device=config.device)
+
     test_loss = 0.0
+    total_samples = 0
+    criterion = torch.nn.BCEWithLogitsLoss()
 
     with torch.no_grad():
         for batch in tqdm(test, desc="SL Evaluation", leave=False):
             batch = batch.to(config.device)
-            batch_labels = batch.y
 
-            logits = router(batch)
-            loss = torch.nn.BCEWithLogitsLoss()(logits, batch_labels)
+            # One binary label per sample
+            targets_raw = batch.y.float().reshape(-1)
+            logits, latency = router(batch)
+            logits = logits.reshape(-1)
+
+            assert logits.shape == targets_raw.shape, (
+                f"Output shape {logits.shape} does not match "
+                f"label shape {targets_raw.shape}"
+            )
+
+            loss = criterion(logits, targets_raw)
 
             predictions = logits >= 0
-            targets = batch_labels >= 0.5
+            targets = targets_raw >= 0.5
 
-            test_loss += loss.item() * targets.size(0)
-            correct += (predictions == targets).sum(dim=0)
-            tp += ((predictions == 1) & (targets == 1)).sum(dim=0)
-            fp += ((predictions == 1) & (targets == 0)).sum(dim=0)
-            fn += ((predictions == 0) & (targets == 1)).sum(dim=0)
+            batch_size = targets.numel()
+            test_loss += loss.item() * batch_size
+            total_samples += batch_size
 
-    test_loss /= num_test_samples
-    test_accuracy = correct / num_test_samples
+            correct += (predictions == targets).sum()
+            tp += (predictions & targets).sum()
+            fp += (predictions & ~targets).sum()
+            fn += (~predictions & targets).sum()
+
+    test_loss /= total_samples
+    test_accuracy = correct / total_samples
     precision = tp / (tp + fp + 1e-8)
     recall = tp / (tp + fn + 1e-8)
 
-    print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Test Loss: {test_loss:.4f} | Accuracy: {test_accuracy.mean().item():.4f} | Precision: {precision.mean().item():.4f} | Recall: {recall.mean().item():.4f}")
-    print(f"Per Expert Accuracy: {test_accuracy.cpu().numpy()}, Precision: {precision.cpu().numpy()}, Recall: {recall.cpu().numpy()}\n")
+    print(
+        f"Epoch {epoch} | Train Loss: {train_loss:.4f} "
+        f"| Test Loss: {test_loss:.4f} "
+        f"| Accuracy: {test_accuracy.item():.4f} "
+        f"| Precision: {precision.item():.4f} "
+        f"| Recall: {recall.item():.4f}"
+    )
+
+    return test_loss
 
 
 def sl_train_loop(config, router, train, test):
     num_experts = len(config.moe_experts)
     criterion = torch.nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(router.parameters(), lr=config.router_sl_learning_rate)
+    best_loss = 1e10
+    patience = config.router_sl_patience
 
     for epoch in range(config.router_sl_num_epochs):
         losses = []
@@ -138,7 +161,7 @@ def sl_train_loop(config, router, train, test):
             batch_labels = batch.y
             optimizer.zero_grad()
 
-            logits = router(batch)
+            logits, latency = router(batch)
             loss = criterion(logits, batch_labels)
 
             loss.backward()
@@ -147,9 +170,18 @@ def sl_train_loop(config, router, train, test):
             losses.append(loss.item())
 
         train_loss = sum(losses) / len(losses)
-        sl_evaluate(config, router, test, num_experts, epoch, train_loss)
+        test_loss = sl_evaluate(config, router, test, num_experts, epoch, train_loss)
 
-    router.save(f"checkpoints/evaluate_cps/moe_{config.code_name}_router.pt")
+        if test_loss < best_loss:
+            best_loss = test_loss
+            patience = config.router_sl_patience
+        else:
+            patience -= 1
+            if patience <= 0:
+                print(f"Early stopping at epoch {epoch} due to no improvement in test loss.")
+                break
+
+    router.save(f"checkpoints/evaluate_cps/router_{config.code_name}.pt")
 
 
 def get_decoders(config, env):

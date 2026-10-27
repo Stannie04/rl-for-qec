@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from src.environment import QECEnv
 from src.train_utils.datasets import load_shots
-from src.train_utils.inference import get_agent_and_inference
+from src.train_utils.inference import get_agent_and_inference, inference
 from collections import Counter, defaultdict
 from matplotlib.colors import LogNorm
 import seaborn as sns
@@ -136,8 +136,52 @@ def render_mistakes(config):
         print(f"Correct {correct_actions} | Taken: {actions}")
 
 
+def split_inference_between_shot_types(config, agent_name, unique_shots, task="failures", checkpoint=None):
+    x_patterns = unique_shots[:, 0, :]
+    z_patterns = unique_shots[:, 1, :]
+    unique_x, inverse_x = np.unique(x_patterns, axis=0, return_inverse=True)
+    unique_z, inverse_z = np.unique(z_patterns, axis=0, return_inverse=True)
 
-def plot_oracle_mistakes(config, all_mistakes, agents):
+    x_shots = np.zeros((len(unique_x), 2, config.n), dtype=np.int8)
+    z_shots = np.zeros((len(unique_z), 2, config.n), dtype=np.int8)
+
+    x_shots[:, 0, :] = unique_x
+    z_shots[:, 1, :] = unique_z
+
+    combined_failures = inference(agent_name, config, np.concatenate([x_shots, z_shots], axis=0), task=task, checkpoint=checkpoint).reshape(-1)
+
+    n_x = len(unique_x)
+    x_fail_unique = combined_failures[:n_x]
+    z_fail_unique = combined_failures[n_x:]
+
+    # Map the results back to the original shots
+    x_failures = x_fail_unique[inverse_x]
+    z_failures = z_fail_unique[inverse_z]
+    full_failures = x_failures | z_failures
+    return full_failures, x_failures, z_failures
+
+
+
+
+
+def get_weighted_ler(failures, counts):
+    full_failures = np.asarray(failures, dtype=bool)
+    failed_counts = counts[full_failures].sum(0)
+    total_counts = counts.sum(0)
+    return np.divide(failed_counts, total_counts, out=np.zeros(len(total_counts), dtype=float), where=total_counts != 0)
+
+
+def get_weighted_ler_on_eval_set(config, agent, checkpoint, eval_set):
+    all_shots, counts = eval_set
+    agent.save(checkpoint)
+    failures, _, _ = split_inference_between_shot_types(config, "rl_hpo", all_shots, checkpoint=checkpoint, task="failures")
+    lers = get_weighted_ler(failures, counts)
+    floor = 0.5 / np.maximum(counts.sum(0), 1)
+    return float(np.log10(np.maximum(lers, floor)).mean()) # Every rate counts equally in relative terms
+
+
+
+def plot_oracle_mistakes(config, all_mistakes):
     """
     Plot the number of oracle mistakes for every pair of agents.
 
@@ -145,60 +189,79 @@ def plot_oracle_mistakes(config, all_mistakes, agents):
     so the remaining mistakes are those made by both models.
     """
 
-    def mistake_counter(mistakes):
-        """Count occurrences of each mistake."""
-        mistakes = np.ascontiguousarray(mistakes)
-        flat = mistakes.reshape(mistakes.shape[0], -1)
-        return Counter(row.tobytes() for row in flat)
+    all_shots, counts = load_shots(config, dataset_type="random_labelled")
 
-    all_mistakes = {agents.get(k, k): v for k, v in all_mistakes.items()}
+    num_shots = len(all_shots)
+    packed_shots = np.packbits(all_shots.reshape(num_shots, -1), axis=1)
+    shot_keys = [shot.tobytes() for shot in packed_shots]
 
-    agent_names = list(all_mistakes.keys())
-    counters = {
-        name: mistake_counter(mistakes)
-        for name, mistakes in all_mistakes.items()
-    }
+    # Select the highest evaluation error rate.
+    error_rates = list(config.evaluation_error_rates)
+    rate_idx = int(np.argmax(error_rates))
+    selected_rate = error_rates[rate_idx]
+
+    # Build a set of mistake keys for each available agent.
+    agent_names = [name for name, mistakes in all_mistakes.items()if mistakes is not None]
+    mistake_keys = {}
+
+    for name in agent_names:
+        mistakes = np.asarray(all_mistakes[name])
+        if len(mistakes) == 0:
+            mistake_keys[name] = set()
+            continue
+        packed_mistakes = np.packbits(mistakes.reshape(len(mistakes), -1), axis=1)
+        mistake_keys[name] = {shot.tobytes() for shot in packed_mistakes}
+
+    # Compute each agent's failure mask on the evaluation dataset.
+    failure_masks = {name: np.fromiter((key in mistake_keys[name] for key in shot_keys),dtype=bool,count=num_shots) for name in agent_names}
 
     n = len(agent_names)
-    oracle = np.zeros((n, n), dtype=int)
+    oracle = np.zeros((n, n), dtype=float)
 
+    # Compute weighted LER for every pair.
     for i, a in enumerate(agent_names):
         for j, b in enumerate(agent_names):
+            # The oracle fails only if both agents fail.
+            failures = failure_masks[a] & failure_masks[b]
 
-            if i == j:
-                oracle[i, j] = len(all_mistakes[a])
-                continue
+            ler = get_weighted_ler(failures, counts)
+            oracle[i, j] = ler[rate_idx]
 
-            # Multiset intersection
-            shared = 0
-            keys = counters[a].keys() & counters[b].keys()
-            for k in keys:
-                shared += min(counters[a][k], counters[b][k])
-
-            oracle[i, j] = shared
+    # Plot weighted LER values, not raw mistake counts.
+    plt.figure(figsize=(9, 7))
 
     sns.heatmap(
         oracle,
         cmap="viridis",
-        norm=LogNorm(vmin=max(1, oracle.min()), vmax=oracle.max()),
         annot=True,
-        fmt=",",
+        fmt=".2e",
         xticklabels=agent_names,
         yticklabels=agent_names,
         linewidths=0.8,
         linecolor="white",
         square=True,
         cbar_kws={
-            "label": "Remaining mistakes",
+            "label": f"Weighted LER (p = {selected_rate:g})",
             "shrink": 0.8
         }
     )
 
     plt.xlabel("")
     plt.ylabel("")
+    plt.title(f"Oracle weighted LER at p = {selected_rate:g}")
     plt.xticks(rotation=45, ha="right", fontsize=10)
     plt.yticks(rotation=0)
 
     plt.tight_layout()
-    os.makedirs(f"results/mistake_distributions/{config.code_name}/{config.noise_model}", exist_ok=True)
-    plt.savefig(f"results/mistake_distributions/{config.code_name}/{config.noise_model}/oracle_heatmap.png", dpi=300)
+
+    output_dir = (
+        f"results/mistake_distributions/"
+        f"{config.code_name}/{config.noise_model}"
+    )
+    os.makedirs(output_dir, exist_ok=True)
+
+    plt.savefig(
+        f"{output_dir}/oracle_heatmap.png",
+        dpi=300
+    )
+    plt.close()

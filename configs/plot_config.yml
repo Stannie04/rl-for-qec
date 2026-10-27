@@ -4,6 +4,18 @@ bp:
   linestyle: "-"
   marker: "o"
 
+bp_osd:
+  label: "BP+OSD"
+  color: "#0072B2"
+  linestyle: ":"
+  marker: "s"
+
+bp_lsd:
+  label: "BP+LSD"
+  color: "#0072B2"
+  linestyle: "-"
+  marker: "^"
+
 mwpm:
   label: "MWPM"
   color: "#7772B2"

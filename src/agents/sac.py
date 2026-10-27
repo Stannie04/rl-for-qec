@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.data import Batch
 from torch.distributions.categorical import Categorical
+import time
 
 from .sac_networks import GNNActor, GNNCritic
 
@@ -106,13 +107,13 @@ class SACAgent:
         self.tau = config.tau
 
         self.total_steps = 0
-        self.inference_threshold = config.inference_threshold
 
         if checkpoint:
             self.load(checkpoint)
 
     def select_action(self, state, evaluate=False):
 
+        start_time = time.perf_counter()
         with torch.no_grad():
             logits, log_probs, probs = self.actor(state.to(self.device))
 
@@ -120,7 +121,8 @@ class SACAgent:
                 action = probs.argmax(dim=-1)
             else:
                 action = Categorical(probs).sample()
-        return action, probs
+        end_time = time.perf_counter_ns()
+        return action, probs, (end_time - start_time) / 1000  # Return time in microseconds
 
     def train_step(self):
         if self.device.type == "cuda":

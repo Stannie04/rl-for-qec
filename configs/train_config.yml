@@ -15,6 +15,13 @@ steps_between_evaluation_sl: 5_000
 max_evaluation_error: 8
 eval_episodes_per_weight: 200
 
+
+# Classic agent parameteres
+bp_iterations: 30
+bp_osd_iterations: 50
+bp_lsd_iterations: 50
+
+
 ## After training
 post_training_evaluation_episodes: 10_000_000
 
@@ -26,11 +33,12 @@ evaluation_error_rates:
   - 0.005
 
 agents_to_evaluate:
-  - bp
-  - bp_osd
-  - bp_lsd
-  - rl_nbp
-  - mwpm
+  - router
+#  - bp
+#  - bp_osd
+#  - bp_lsd
+#  - rl_nbp
+#  - mwpm
 
 
 # HPO parameters
@@ -52,8 +60,9 @@ moe_start_p: 0.15
 moe_end_p: 0.05
 moe_time_penalty_factor: 100
 
-
-router_sl_num_epochs: 10
+router_sl_patience_warmup: 50
+router_sl_patience: 200
+router_sl_num_epochs: 500
 router_sl_batch_size: 128
 
 # Logging parameters for Weights & Biases

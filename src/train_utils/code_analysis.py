@@ -100,7 +100,7 @@ def mistake_overlap_between_agents(config, agents):
 
 def compute_all_mistake_overlaps(config, all_mistakes):
 
-    random_shots = load_shots(config, dataset_type="uniform")
+    random_shots, counts = load_shots(config, dataset_type="random_labelled")
     random_shot_distribution = {}
     for shot in tqdm(random_shots, leave=False):
         num_errors = shot[0].sum()
@@ -112,6 +112,8 @@ def compute_all_mistake_overlaps(config, all_mistakes):
 
 
     for agent_name, mistakes in all_mistakes.items():
+        if mistakes is None:
+            continue
         print("\n" + "=" * 80)
         print(f"{agent_name:^80}")
         print("=" * 80)
@@ -141,7 +143,7 @@ def compute_all_mistake_overlaps(config, all_mistakes):
         print("-" * 80)
 
         for other_agent_name, other_mistakes in all_mistakes.items():
-            if other_agent_name == agent_name:
+            if other_agent_name == agent_name or other_mistakes is None:
                 continue
 
             # Overall overlap

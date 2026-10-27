@@ -7,9 +7,10 @@ import torch
 from src.agents import RouterAgent, RouterNetwork
 from src.environment import QECEnv
 from src.read_config import ConfigParser
-from src.train_utils.datasets import create_dataset_from_random_shots,  create_dataset_from_uniform_shots, create_dataset_from_random_shots_labelled
+from src.train_utils.datasets import create_dataset_from_random_shots,  create_dataset_from_uniform_shots, create_dataset_from_random_shots_labelled, load_shots
 from src.train_utils.inference import get_agent_and_inference, inference
-from src.train_utils.plotting import plot_results
+from src.train_utils.plotting import plot_results, plot_oracle_mistakes, get_weighted_ler, split_inference_between_shot_types
+from src.train_utils.code_analysis import compute_all_mistake_overlaps
 
 
 def evaluate_agent(config: ConfigParser, step, best_model_ler, agent_name=None, checkpoint_dir=None):
@@ -51,46 +52,6 @@ def evaluate_agent(config: ConfigParser, step, best_model_ler, agent_name=None, 
     return ler, best_model_ler
 
 
-def split_inference_between_shot_types(config, agent_name, unique_shots, task="failures", checkpoint=None):
-    x_patterns = unique_shots[:, 0, :]
-    z_patterns = unique_shots[:, 1, :]
-    unique_x, inverse_x = np.unique(x_patterns, axis=0, return_inverse=True)
-    unique_z, inverse_z = np.unique(z_patterns, axis=0, return_inverse=True)
-
-    x_shots = np.zeros((len(unique_x), 2, config.n), dtype=np.int8)
-    z_shots = np.zeros((len(unique_z), 2, config.n), dtype=np.int8)
-
-    x_shots[:, 0, :] = unique_x
-    z_shots[:, 1, :] = unique_z
-
-    combined_failures = inference(agent_name, config, np.concatenate([x_shots, z_shots], axis=0), task=task, checkpoint=checkpoint).reshape(-1)
-
-    n_x = len(unique_x)
-    x_fail_unique = combined_failures[:n_x]
-    z_fail_unique = combined_failures[n_x:]
-
-    # Map the results back to the original shots
-    x_failures = x_fail_unique[inverse_x]
-    z_failures = z_fail_unique[inverse_z]
-    full_failures = x_failures | z_failures
-    return full_failures, x_failures, z_failures
-
-
-def get_weighted_ler(failures, counts):
-    full_failures = np.asarray(failures, dtype=bool)
-    failed_counts = counts[full_failures].sum(0)
-    total_counts = counts.sum(0)
-    return np.divide(failed_counts, total_counts, out=np.zeros(len(total_counts), dtype=float), where=total_counts != 0)
-
-
-def get_weighted_ler_on_eval_set(config, agent, checkpoint, eval_set):
-    all_shots, counts = eval_set
-    agent.save(checkpoint)
-    failures, _, _ = split_inference_between_shot_types(config, "rl_hpo", all_shots, checkpoint=checkpoint, task="failures")
-    lers = get_weighted_ler(failures, counts)
-    floor = 0.5 / np.maximum(counts.sum(0), 1)
-    return float(np.log10(np.maximum(lers, floor)).mean()) # Every rate counts equally in relative terms
-
 
 def per_to_ler_agents(config, agents, plot_file=None):
 
@@ -110,6 +71,37 @@ def per_to_ler_agents(config, agents, plot_file=None):
         plot_results(results, config, plot_file)
 
 
+def evaluate_from_dataset(config, plot_file=None):
+    all_shots, counts = load_shots(config, dataset_type="random_labelled")
+    mistakes = {agent: load_shots(config, dataset_type="mistakes", agent_name=agent) for agent in config.agents_to_evaluate}
+
+    num_shots = len(all_shots)
+    packed_shots = np.packbits(all_shots.reshape(num_shots, -1), axis=1)
+
+    results = {}
+    for agent_name in config.agents_to_evaluate:
+        agent_mistakes = mistakes[agent_name]
+        if agent_mistakes is None:
+            continue
+        if len(agent_mistakes) == 0:
+            failures = np.zeros(num_shots, dtype=bool)
+        else:
+            packed_mistakes = np.packbits(agent_mistakes.reshape(len(agent_mistakes), -1), axis=-1)
+            packed_mistakes_bytes = {shot.tobytes() for shot in packed_mistakes}
+            failures = np.fromiter((shot.tobytes() in packed_mistakes_bytes for shot in tqdm(packed_shots, desc=f"Evaluating {agent_name}", leave=False)), dtype=bool, count=num_shots)
+
+        ler = get_weighted_ler(failures, counts)
+
+        results[agent_name] = {config.evaluation_error_rates[i]: ler[i] for i in range(len(config.evaluation_error_rates))}
+        print(f"\nResults for {agent_name}: {results[agent_name]}")
+
+    # compute_all_mistake_overlaps(config, mistakes)
+    plot_oracle_mistakes(config, mistakes)
+
+    if plot_file is not None:
+        plot_results(results, config, plot_file)
+
+
 def generalizability_evaluation(config, agents):
 
     results = {}
@@ -123,4 +115,5 @@ def generalizability_evaluation(config, agents):
 
 def post_train_evaluation(config):
     # Evaluate the agent at the end of training and print results to console.
-    per_to_ler_agents(config, config.agents_to_evaluate, plot_file=f"results/per_to_ler/{config.code_name}.png")
+    # per_to_ler_agents(config, config.agents_to_evaluate, plot_file=f"results/per_to_ler/{config.code_name}.png")
+    evaluate_from_dataset(config, plot_file=f"results/per_to_ler/{config.code_name}.png")
