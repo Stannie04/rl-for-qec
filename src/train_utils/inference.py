@@ -4,7 +4,7 @@ from src.environment import QECEnv
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 from tqdm import tqdm
-
+import time
 
 def get_worker_fn(task):
     match task:
@@ -35,7 +35,7 @@ def inference(agent_name, config, shots, task, repetition=None, parallel=True, c
         ))
 
     if task == "mistakes":
-        return [mistake for chunk in chunk_results for mistake in chunk]
+        return [mistake for chunk_mistakes, _ in chunk_results for mistake in chunk_mistakes], [latency for _, chunk_latencies in chunk_results for latency in chunk_latencies]
 
     return np.concatenate(chunk_results)
 
@@ -48,11 +48,13 @@ def count_failures(agent, env, inference_fn, worker_id):
 
 
 def collect_mistakes(agent, env, inference_fn, worker_id):
-    mistakes = []
+    mistakes, latencies = [], []
     for x, z in tqdm(env.shots, desc=f"Worker {worker_id}", position=worker_id, leave=False):
-        if not inference_fn(agent, env):
+        success, latency = inference_fn(agent, env)
+        if not success:
             mistakes.append((x, z))
-    return mistakes
+        latencies.append(latency)
+    return mistakes, latencies
 
 
 def run_worker(agent_name, config, shots, worker_fn, worker_id, repetition=None, checkpoint=None):
@@ -88,7 +90,7 @@ def get_agent(config, env, agent_name, repetition=None, checkpoint=None):
             case "rl_hpo": return SACAgent(env, config, checkpoint=checkpoint)
 
             case "router":
-                checkpoint = f"checkpoints/evaluate_cps/moe_{config.code_name}_router.pt" if checkpoint is None else checkpoint
+                checkpoint = f"checkpoints/evaluate_cps/router_{config.code_name}.pt" if checkpoint is None else checkpoint
                 router = RouterNetwork(config, env, checkpoint)
                 expert_list, inference_list = [], []
                 for decoder_name in config.moe_experts:
@@ -100,8 +102,8 @@ def get_agent(config, env, agent_name, repetition=None, checkpoint=None):
             case "rl_nbp":
                 config.use_neural_bp = True
                 config.hidden_layers_mlp = [256,128,64]
-                config.neural_bp_iterations = 4 if config.code_name == "288_8_12_tile" else 8
-                config.neural_bp_hidden_dim = 64 if config.code_name == "288_8_12_tile" else 128
+                config.neural_bp_iterations = 4
+                config.neural_bp_hidden_dim = 64
 
                 agent = SACAgent(env, config, checkpoint=checkpoint)
 
@@ -145,28 +147,28 @@ def classical_inference(agent, env, state=None):
 
     obs, info = state if state is not None else env.reset()
 
-    error_pred, _ = agent.select_action(obs)
+    error_pred, time = agent.select_action(obs)
 
     if len(error_pred) == 0:
-        return env.code.is_syndrome_free() and not env.code.has_logical_error()
+        return env.code.is_syndrome_free() and not env.code.has_logical_error(), time
 
     for a in error_pred:
         env.step(a)
 
-    return env.code.is_syndrome_free() and not env.code.has_logical_error()
+    return env.code.is_syndrome_free() and not env.code.has_logical_error(), time
 
 
 def rl_inference(agent, env, state=None):
 
     obs, info = state if state is not None else env.reset()
     done = info["syndrome_free"]
-
+    total_time = 0
     while not done:
-        action, _ = agent.select_action(obs, evaluate=True)
+        action, _, time = agent.select_action(obs, evaluate=True)
         obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
-
-    return env.code.is_syndrome_free() and not env.code.has_logical_error()
+        total_time += time
+    return env.code.is_syndrome_free() and not env.code.has_logical_error(), total_time
 
 
 def sl_inference(agent, env, state=None):
@@ -197,6 +199,7 @@ def router_inference(agent, env, state=None):
         return True
 
     with torch.no_grad():
-        action = torch.argmin(router(obs), dim=-1).item()
+        pred, time = router(obs)
+        action = int(pred.item() > 0)
 
-    return inference_list[action](expert_list[action], env, state=(obs, info))
+    return inference_list[action](expert_list[action], env, state=(obs, info)), time

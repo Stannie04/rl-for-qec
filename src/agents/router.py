@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import time
 
 from .encoders import NeuralBPEncoder, CGNNEncoder
 from .common import graph_mean_pool
@@ -24,7 +25,7 @@ class RouterNetwork(nn.Module):
             classification_layers.append(nn.Linear(prev_dim, hidden_dim))
             classification_layers.append(nn.ReLU())
             prev_dim = hidden_dim
-        classification_layers.append(nn.Linear(prev_dim, len(config.moe_experts)))
+        classification_layers.append(nn.Linear(prev_dim, 1))
         self.action_head = nn.Sequential(*classification_layers)
 
         self = self.to(self.device)
@@ -34,17 +35,17 @@ class RouterNetwork(nn.Module):
 
 
     def forward(self, x):
+        start_time = time.perf_counter_ns()
         h = self.encoder(x)
-
         batch = getattr(x, "batch", None)
-
         if batch is None:
             batch = torch.zeros(h.size(0), dtype=torch.long, device=h.device)
         else:
             batch = batch.to(h.device)
-
         graph_feat = graph_mean_pool(h, x, batch)
-        return self.action_head(graph_feat)
+        out = self.action_head(graph_feat).flatten()
+        end_time = time.perf_counter_ns()
+        return out, (end_time - start_time) / 1000
 
     def load(self, checkpoint):
         self.load_state_dict(torch.load(checkpoint, map_location=self.device))

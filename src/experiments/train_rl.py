@@ -71,7 +71,7 @@ def rl_training_loop(env, agent, config, checkpoint_dir=None, eval_fn=None, on_e
 
         action, probs = agent.select_action(obs)
         next_obs, reward, terminated, truncated, info = env.step(action)
-        agent.replay_buffer.push(obs, action, reward, next_obs, (terminated or truncated))
+        agent.replay_buffer.push(obs, int(action), float(reward), next_obs, float(terminated))
         obs = next_obs
 
         if step % config.train_frequency == 0:
@@ -88,11 +88,11 @@ def rl_training_loop(env, agent, config, checkpoint_dir=None, eval_fn=None, on_e
             start_x_errors = info["num_x_errors"]
             start_z_errors = info["num_z_errors"]
 
-        if config.evaluate_during_training and step > 0 and step % config.steps_between_evaluation == 0:
+        if config.evaluate_during_training and (step+1) % config.steps_between_evaluation_rl == 0:
             score = _run_eval(step)
             eval_logs = {"Evaluation/Logical Error Rate": score, "Evaluation/Best Logical Error Rate": best_model_ler}
 
-        if config.wandb_logging:
+        if config.wandb_logging and step % config.wandb_log_frequency == 0:
             log_wandb_data(step, env, start_time, probs, **train_step_logs, **eval_logs, **done_logs)
 
     return evaluate_agent(config, len(env.shots), best_model_ler, agent, checkpoint_dir)
@@ -109,7 +109,7 @@ def train_rl(config):
     os.mkdir(checkpoint_dir)
 
     try:
-        shots = create_dataset_from_curriculum(config, num_samples=config.num_timesteps, specialized=config.specialize_agent, save=False)
+        shots = create_dataset_from_curriculum(config, num_samples=config.num_rl_steps, specialized=config.specialize_agent, save=False)
         env = QECEnv(config, shots)
         agent = SACAgent(env, config)
 

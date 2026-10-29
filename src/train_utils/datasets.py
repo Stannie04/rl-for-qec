@@ -17,23 +17,35 @@ from src.train_utils.inference import get_agent_and_inference, inference
 def load_shots(config, dataset_type="random", agent_name=None, num_epochs=None):
     match dataset_type:
         case "random": shots = np.load(f"datasets/{config.code_name}/random_{config.noise_model}.npy", allow_pickle=True)
+        case "random_labelled":
+            shots = (np.load(f"datasets/{config.code_name}/random_labelled_{config.noise_model}.npy", allow_pickle=True),
+                     np.load(f"datasets/{config.code_name}/random_labelled_counts_{config.noise_model}.npy", allow_pickle=True))
+
         case "uniform": shots = np.load(f"datasets/{config.code_name}/uniform_{config.noise_model}.npy", allow_pickle=True)
         case "nonzero": shots = np.load(f"datasets/{config.code_name}/nonzero_{config.noise_model}.npy", allow_pickle=True)
         case "all": shots = np.load(f"datasets/{config.code_name}/all_{config.noise_model}.npy", allow_pickle=True)
+
         case "moe": shots = np.load(f"datasets/{config.code_name}/moe_{config.noise_model}.npy", allow_pickle=True)
         case "moe_labelled": shots = torch.load(f"datasets/{config.code_name}/moe_{config.noise_model}_labelled.pt", map_location=torch.device('cpu'))
+
         case "mistakes":
-            shots = np.load(f"datasets/{config.code_name}/mistakes/{agent_name}_{config.noise_model}_uniform.npy", allow_pickle=True)
+            try:
+                shots = np.load(f"datasets/{config.code_name}/mistakes/{agent_name}_{config.noise_model}_random_labelled.npy", allow_pickle=True)
+            except FileNotFoundError:
+                print(f"No mistakes dataset found for agent {agent_name} on code {config.code_name}.")
+                return None
 
             # If num_epochs is specified, repeat the dataset to match the number of epochs
             # Shape of shots is (num_samples * num_epochs, 2, n)
             if num_epochs is not None:
                 shots = np.tile(shots, (num_epochs, 1, 1))
 
+            if len(shots) == 0:
+                return np.empty((0, 2, config.n), dtype=np.int8)
             # Order by number of errors to speed up training
-            num_errors = np.sum(shots[:, 0, :], axis=1) + np.sum(shots[:, 1, :], axis=1)
-            sorted_indices = np.argsort(num_errors)
-            shots = shots[sorted_indices]
+            # num_errors = np.sum(shots[:, 0, :], axis=1) + np.sum(shots[:, 1, :], axis=1)
+            # sorted_indices = np.argsort(num_errors)
+            # shots = shots[sorted_indices]
 
         case _: raise ValueError(f"Unknown dataset type: {dataset_type}")
 
@@ -57,24 +69,31 @@ def create_dataset_from_moe_shots(config, save=False):
 
 
 def create_dataset_from_moe_shots_labelled(config, save=False):
-    shots = load_shots(config, dataset_type="uniform")
-    np.random.shuffle(shots)
+    shots, _ = load_shots(config, dataset_type="random_labelled")
 
+    # Though the dataset will be shuffled later, we shuffle here too to ensure that pruning the dataset to the number of mistakes does not bias the dataset towards any particular error weight.
+    np.random.shuffle(shots)
     # Build labels.
-    mistakes = {expert: load_shots(config, dataset_type="mistakes", agent_name=expert) for expert in config.moe_experts}
-    labels = np.zeros((len(shots), len(config.moe_experts)), dtype=np.int8)
-    mistake_sets = [
-        {np.ascontiguousarray(shot).tobytes() for shot in expert_mistakes}
-        for expert_mistakes in mistakes.values()
-    ]
-    for i, shot in tqdm(enumerate(shots)):
+    # mistakes = {expert: load_shots(config, dataset_type="mistakes", agent_name=expert) for expert in config.moe_experts}
+    mistakes = load_shots(config, dataset_type="mistakes", agent_name="bp")
+    num_mistakes = len(mistakes)
+
+    # Prune the shots to the number of mistakes, to ensure a balanced dataset.
+    if len(shots) > num_mistakes:
+        shots = shots[:num_mistakes]
+
+    all_shots = np.concatenate((shots, mistakes), axis=0)
+
+    labels = np.zeros(len(all_shots), dtype=np.int8)
+    mistake_set = [np.ascontiguousarray(shot).tobytes() for shot in mistakes]
+
+    for i, shot in tqdm(enumerate(all_shots)):
         shot_key = np.ascontiguousarray(shot).tobytes()
-        for j, mistake_set in enumerate(mistake_sets):
-            labels[i, j] = shot_key in mistake_set
+        labels[i] = shot_key in mistake_set
     labels = torch.as_tensor(labels, dtype=torch.float32).cpu()
 
     # Build observations.
-    env = QECEnv(config, shots=shots)
+    env = QECEnv(config, shots=all_shots)
     edge_index = env.code.data.edge_index
     observations = [env.reset()[0].x.detach().clone() for _ in tqdm(env.shots, desc="Collecting observations for MOE dataset", leave=False)]
     dataset = {"x": torch.stack(observations), "edge_index": edge_index, "labels": labels}
@@ -83,7 +102,7 @@ def create_dataset_from_moe_shots_labelled(config, save=False):
         os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
         torch.save(dataset, f"datasets/{config.code_name}/moe_{config.noise_model}_labelled.pt")
 
-    return shots, labels
+    return all_shots, labels
 
 
 def create_dataset_from_curriculum(config, num_samples, specialized=False, save=False):
@@ -192,6 +211,11 @@ def create_dataset_from_random_shots_labelled(config, num_samples, error_rates, 
 
     counts = np.stack([shot_counts[k] for k in keys])
 
+    if save:
+        os.makedirs(f"datasets/{config.code_name}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/random_labelled_{config.noise_model}.npy", unique_shots)
+        np.save(f"datasets/{config.code_name}/random_labelled_counts_{config.noise_model}.npy", counts)
+
     print(f"\nTotal unique shots across all error rates: {len(unique_shots)}")
     return unique_shots, counts
 
@@ -254,14 +278,29 @@ def create_dataset_from_nonzero_shots(config, num_samples, error_rate, save=Fals
 
 def create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform", save=False):
 
-    shots = load_shots(config, dataset_type=shot_type)
-    dataset = inference(agent_name, config, shots, task="mistakes")
+    if agent_name == "router":
+        expert_mistakes = [load_shots(config, dataset_type="mistakes", agent_name=expert) for expert in config.moe_experts]
+        shots = np.concatenate(expert_mistakes, axis=0)
+        shots = np.unique(shots, axis=0)
+
+    else:
+        shots = load_shots(config, dataset_type=shot_type)
+        if shot_type == "random_labelled":
+            shots, counts = shots
+            shots, counts = shots[:len(shots)//10], counts[:len(counts)//10]
+
+    dataset, latencies = inference(agent_name, config, shots, task="mistakes")
 
     print(f"Collected {len(dataset)} samples of expert mistakes for agent {agent_name} on code {config.code_name}.")
 
+    if agent_name == "bp": agent_name = f"bp_{config.bp_iterations}"
+    if agent_name == "bp_osd": agent_name = f"bp_osd_{config.bp_osd_iterations}"
+    if agent_name == "bp_lsd": agent_name = f"bp_lsd_{config.bp_lsd_iterations}"
+
     if save:
-        os.makedirs(f"datasets/{config.code_name}/mistakes", exist_ok=True)
-        np.save(f"datasets/{config.code_name}/mistakes/{agent_name}_{config.noise_model}_{shot_type}.npy", np.array(dataset))
+        os.makedirs(f"datasets/{config.code_name}/mistakes/{config.noise_model}/{shot_type}", exist_ok=True)
+        np.save(f"datasets/{config.code_name}/mistakes/{config.noise_model}/{shot_type}/{agent_name}_.npy", np.array(dataset))
+        np.save(f"datasets/{config.code_name}/mistakes/{config.noise_model}/{shot_type}/{agent_name}_latencies.npy", np.array(latencies))
 
     return dataset
 
@@ -318,12 +357,14 @@ def create_dataset_from_all_permutations(config, num_errors=[3,4], save=False):
 def create_all_datasets(config):
     # create_dataset_from_random_shots(config, num_samples=int(1e6), error_rate=config.curriculum_end_error_rate, save=True)
     # create_dataset_from_nonzero_shots(config, num_samples=int(1e6), error_rate=config.curriculum_end_error_rate, save=True)
-    # create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), max_error=5, reorder=True, save=True)
+    # create_dataset_from_uniform_shots(config, num_samples_per_error=int(1e5), max_error=config.max_evaluation_error, reorder=True, save=True)
 
-    # for agent_name in ["rl_nbp"]:
-    #     create_dataset_from_expert_mistakes(config, agent_name, shot_type="uniform", save=True)
+    # create_dataset_from_random_shots_labelled(config, num_samples=config.post_training_evaluation_episodes, error_rates=config.evaluation_error_rates, save=True)
 
-    create_dataset_from_moe_shots_labelled(config, save=True)
+    for agent_name in config.agents_to_evaluate:
+        create_dataset_from_expert_mistakes(config, agent_name, shot_type="random_labelled", save=True)
+
+    # create_dataset_from_moe_shots_labelled(config, save=True)
 
     # create_dataset_from_all_permutations(config, save=True)
     # create_dataset_from_moe_shots(config, save=True)

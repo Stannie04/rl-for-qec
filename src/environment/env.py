@@ -18,7 +18,7 @@ class QECEnv(gym.Env):
         self.curriculum_error_rate = config.curriculum_start_error_rate_144 * 144 / self.code.n_data
 
         self.episode_steps = 0
-        self.max_episode_length = config.max_episode_length if not evaluate else 2*self.code.d # Allow more steps during evaluation to give the agent a better chance to correct errors.
+        self.max_episode_length = 2*self.code.d # Allow more steps during evaluation to give the agent a better chance to correct errors.
 
         # Information about the previous step, used for reward calculation and logging.
         self.previous_num_x_errors = 0
@@ -155,3 +155,5 @@ class QECEnv(gym.Env):
         self.initial_z_syndromes = self.info["num_z_syndromes"]
         self.previous_num_x_errors = self.initial_x_errors
         self.previous_num_z_errors = self.initial_z_errors
+
+        self.max_episode_length = (self.initial_x_errors + self.initial_z_errors) * 2 if not self.evaluate else 2*self.code.d

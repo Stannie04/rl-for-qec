@@ -33,6 +33,7 @@ class ConfigParser:
         self.agent_name = agent_name
         self.code_name = code_name
         self.verbose = verbose
+
         self.wandb_run_name = run_name if run_name is not None else f"{agent_name}_{code_name}"
         if self.verbose:
             self._print_configuration()

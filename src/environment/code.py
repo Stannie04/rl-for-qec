@@ -28,8 +28,9 @@ class QECCode(gym.Env):
 
         elif config.code_type == "tile":
             self.n, self.k, self.d = config.n, config.k, config.d
-            self.L = config.L # Size of the tile code in terms of number of tiles (L x L)
-            self.H = ParityCheckMatrices("tile", L=self.L, code_params=config.code_params, device=self.device)
+            self.L = config.L # Size of the tile code in terms of number of tiles (L x M)
+            self.M = config.M
+            self.H = ParityCheckMatrices("tile", L=self.L, M=self.M, code_params=config.code_params, device=self.device)
             self.n_data, self.n_stabilizers = self.H.x.shape[1], self.H.x.shape[0]
 
         self.graph, self.data, self.node_to_index = self._init_graph()

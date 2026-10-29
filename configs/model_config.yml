@@ -17,12 +17,13 @@ sac:
 
   # Used for the dueling MLPs + GRU in the neural BP decoder
   neural_bp_iterations: 4
-  neural_bp_hidden_dim: 64
+  neural_bp_hidden_dim: 32
 
   hidden_layers_mlp:
     - 256
     - 128
     - 64
+    - 32
 
   train_frequency: 1
 
@@ -32,14 +33,13 @@ sac:
 
   use_neural_bp: True
   use_per: True
-  inference_threshold: 0.2
 
 moe:
   moe_experts:
     - bp
     - rl_nbp
 
-  moe_hidden_layers_gnn:
+  moe_hidden_layers_cgnn:
     - 32
     - 128
     - 256
@@ -49,15 +49,15 @@ moe:
     - 256
 
   moe_hidden_layers_mlp:
-    - 256
-    - 128
+#    - 256
+#    - 128
     - 64
+    - 32
 
   router_sl_test_fraction: 0.2
-  router_sl_epochs: 100
   router_sl_batch_size: 128
   router_sl_learning_rate: 0.0002
-  moe_learning_rate: 0.00001
+  moe_learning_rate: 0.0001
   latency_penalty_factor: 10 # 0 for no penalty
 
 encoder:
